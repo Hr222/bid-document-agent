@@ -4,8 +4,7 @@ env/
 ENV/
 
 .idea/
-.idea/*
-!.idea/.gitignore
+*.iml
 .vscode/
 
 __pycache__/
