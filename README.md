@@ -31,6 +31,8 @@
 
 - Python
 - FastAPI
+- PostgreSQL（计划使用 Docker）
+- pgvector（计划作为 PostgreSQL 扩展启用）
 
 现有接口示例:
 
@@ -49,6 +51,97 @@ uvicorn main:app --reload
 
 - `http://127.0.0.1:8000/`
 - `http://127.0.0.1:8000/hello/User`
+
+## 本地基础设施
+
+当前推荐使用 Docker 启动本地 PostgreSQL，而不是直接在 Windows 里手动安装数据库。这样更适合作为个人展示项目的可复现开发环境。
+
+### 1. 安装 Docker Desktop
+
+先在 Windows 上安装 Docker Desktop，并确保它可以正常启动。
+
+安装完成后，可以在终端里确认:
+
+```bash
+docker --version
+docker compose version
+```
+
+### 2. 准备环境变量
+
+复制一份环境变量模板:
+
+```bash
+copy .env.example .env
+```
+
+如果你不是在 Windows CMD 里执行，也可以手动新建 `.env`，内容参考 `.env.example`。
+
+默认配置:
+
+- `POSTGRES_DB=bid_document_agent`
+- `POSTGRES_USER=postgres`
+- `POSTGRES_PASSWORD=postgres`
+- `POSTGRES_PORT=5432`
+
+### 3. 启动 PostgreSQL + pgvector
+
+项目已经提供了 `docker-compose.yml`，直接在仓库根目录运行:
+
+```bash
+docker compose up -d
+```
+
+第一次启动时会自动:
+
+- 拉取 `pgvector/pgvector:pg17` 镜像
+- 创建 PostgreSQL 容器
+- 执行初始化脚本
+- 启用 `vector` 和 `unaccent` 扩展
+
+### 4. 验证数据库是否可用
+
+查看容器状态:
+
+```bash
+docker compose ps
+```
+
+查看日志:
+
+```bash
+docker compose logs postgres
+```
+
+进入数据库:
+
+```bash
+docker compose exec postgres psql -U postgres -d bid_document_agent
+```
+
+进入后可执行:
+
+```sql
+\dx
+```
+
+如果能看到 `vector` 扩展，就说明 `pgvector` 已经启用成功。
+
+### 5. 停止和清理
+
+停止容器:
+
+```bash
+docker compose down
+```
+
+如果你想连数据卷一起清掉，重新初始化数据库:
+
+```bash
+docker compose down -v
+```
+
+注意: 这会删除容器里的本地数据库数据。
 
 ## 后续规划
 
