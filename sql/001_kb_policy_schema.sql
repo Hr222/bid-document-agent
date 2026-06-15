@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS kb_policy_version (
     CONSTRAINT fk_kb_policy_version_previous_same_policy
         FOREIGN KEY (previous_version_id, policy_id)
         REFERENCES kb_policy_version(id, policy_id)
-        ON DELETE SET NULL
+        ON DELETE RESTRICT
 );
 
 COMMENT ON TABLE kb_policy_version IS '制度规范类版本表：记录资料的各代版本、版本链关系、状态与来源文件信息。';
@@ -283,7 +283,7 @@ CREATE TABLE IF NOT EXISTS kb_policy_version_change (
     CONSTRAINT fk_kb_policy_version_change_from_same_policy
         FOREIGN KEY (from_version_id, policy_id)
         REFERENCES kb_policy_version(id, policy_id)
-        ON DELETE SET NULL,
+        ON DELETE RESTRICT,
     CONSTRAINT fk_kb_policy_version_change_to_same_policy
         FOREIGN KEY (to_version_id, policy_id)
         REFERENCES kb_policy_version(id, policy_id)
@@ -306,13 +306,13 @@ ALTER TABLE kb_policy_document
     ADD CONSTRAINT fk_kb_policy_document_current_version_same_policy
     FOREIGN KEY (current_version_id, id)
     REFERENCES kb_policy_version(id, policy_id)
-    ON DELETE SET NULL;
+    ON DELETE RESTRICT;
 
 ALTER TABLE kb_policy_document
     ADD CONSTRAINT fk_kb_policy_document_latest_version_same_policy
     FOREIGN KEY (latest_version_id, id)
     REFERENCES kb_policy_version(id, policy_id)
-    ON DELETE SET NULL;
+    ON DELETE RESTRICT;
 
 CREATE INDEX IF NOT EXISTS idx_kb_policy_document_status ON kb_policy_document(status);
 CREATE INDEX IF NOT EXISTS idx_kb_policy_document_category ON kb_policy_document(policy_category);
