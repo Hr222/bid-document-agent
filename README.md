@@ -80,16 +80,16 @@ copy .env.example .env
 默认配置:
 
 - `POSTGRES_DB=bid_document_agent`
-- `POSTGRES_USER=postgres`
-- `POSTGRES_PASSWORD=postgres`
+- `POSTGRES_USER=admin`
+- `POSTGRES_PASSWORD=123456`
 - `POSTGRES_PORT=5432`
 
 ### 3. 启动 PostgreSQL + pgvector
 
-项目已经提供了 `docker-compose.yml`，直接在仓库根目录运行:
+项目已经提供了 PostgreSQL 的 Compose 文件，建议在仓库根目录显式指定 `.env` 与 Compose 文件路径:
 
 ```bash
-docker compose up -d
+docker compose --env-file .env -f docker\postgres\docker-compose.yml up -d
 ```
 
 第一次启动时会自动:
@@ -104,19 +104,19 @@ docker compose up -d
 查看容器状态:
 
 ```bash
-docker compose ps
+docker compose --env-file .env -f docker\postgres\docker-compose.yml ps
 ```
 
 查看日志:
 
 ```bash
-docker compose logs postgres
+docker compose --env-file .env -f docker\postgres\docker-compose.yml logs postgres
 ```
 
 进入数据库:
 
 ```bash
-docker compose exec postgres psql -U postgres -d bid_document_agent
+docker compose --env-file .env -f docker\postgres\docker-compose.yml exec postgres psql -U admin -d bid_document_agent
 ```
 
 进入后可执行:
@@ -125,23 +125,25 @@ docker compose exec postgres psql -U postgres -d bid_document_agent
 \dx
 ```
 
-如果能看到 `vector` 扩展，就说明 `pgvector` 已经启用成功。
+如果能看到 `vector` 和 `unaccent` 扩展，就说明初始化已经成功。
 
 ### 5. 停止和清理
 
 停止容器:
 
 ```bash
-docker compose down
+docker compose --env-file .env -f docker\postgres\docker-compose.yml down
 ```
 
 如果你想连数据卷一起清掉，重新初始化数据库:
 
 ```bash
-docker compose down -v
+docker compose --env-file .env -f docker\postgres\docker-compose.yml down -v
 ```
 
 注意: 这会删除容器里的本地数据库数据。
+
+如果你在第一次启动后修改了 `.env` 里的数据库用户、密码或数据库名，仅重新 `up -d` 不会替换已经初始化好的数据卷。此时需要先执行 `down -v`，再重新启动容器。
 
 ## 后续规划
 
