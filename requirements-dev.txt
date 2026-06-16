@@ -1,0 +1,23 @@
+# 开发环境全量依赖
+# 说明：
+# - 个人项目阶段直接保留全量，避免来回拆装依赖
+# - 包含生产依赖 + OCR + 测试 + 调试 + 代码检查
+# - 当前项目定位：
+#   RAG + LLM + LangGraph / LangChain + FastAPI + React
+# - React 前端依赖不放在这里，后续单独由 Node 工程管理
+
+-r requirements-prod.txt
+
+# OCR
+# 说明：
+# - 用于后续处理扫描件、图片版 PDF
+# - 这里只是 Python 包，系统里仍可能需要单独安装 Tesseract
+pillow>=11.3,<12.0
+pytesseract>=0.3.13,<1.0
+
+# 测试与调试
+pytest>=8.4,<9.0
+httpx>=0.28,<1.0
+
+# 代码质量
+ruff>=0.12,<1.0
