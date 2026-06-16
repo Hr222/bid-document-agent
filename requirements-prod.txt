@@ -1,0 +1,32 @@
+# 生产环境依赖
+# 说明：
+# - 这里放后端服务在部署时真正需要的依赖
+# - 聚焦 FastAPI + PostgreSQL/pgvector + RAG/LLM 基础能力
+# - 不包含测试、lint、OCR 等开发期增强工具
+
+# Web API
+fastapi>=0.116,<1.0
+uvicorn[standard]>=0.35,<1.0
+python-multipart>=0.0.20,<1.0
+pydantic-settings>=2.10,<3.0
+
+# Database
+sqlalchemy>=2.0,<3.0
+psycopg[binary]>=3.2,<4.0
+alembic>=1.16,<2.0
+pgvector>=0.4,<1.0
+
+# Knowledge base document parsing
+python-docx>=1.2,<2.0
+pypdf>=5.8,<6.0
+pdfplumber>=0.11,<1.0
+openpyxl>=3.1,<4.0
+
+# LLM / embedding
+openai>=2.0,<3.0
+tiktoken>=0.9,<1.0
+
+# LangChain / LangGraph
+langchain>=0.3,<0.4
+langchain-openai>=0.3,<0.4
+langgraph>=0.2,<0.7
