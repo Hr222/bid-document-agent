@@ -17,3 +17,49 @@ Accept: application/json
 
 GET http://127.0.0.1:8000/api/v1/kb/mvp-status
 Accept: application/json
+
+###
+
+POST http://127.0.0.1:8000/api/v1/kb/policy-ingestion/scan
+Accept: application/json
+Content-Type: application/json
+
+{
+  "source_root": "E:\\data\\18、管理制度",
+  "limit": 20
+}
+
+###
+
+POST http://127.0.0.1:8000/api/v1/kb/policy-ingestion/preview
+Accept: application/json
+Content-Type: application/json
+
+{
+  "source_path": "E:\\data\\18、管理制度\\资产评估--报告审核制度.docx"
+}
+
+###
+
+POST http://127.0.0.1:8000/api/v1/kb/policy-pipeline/preview
+Accept: application/json
+Content-Type: application/json
+
+{
+  "source_path": "E:\\data\\18、管理制度\\资产评估--报告审核制度.docx",
+  "policy_category": "管理制度",
+  "responsible_department": "综合管理部"
+}
+
+###
+
+POST http://127.0.0.1:8000/api/v1/kb/policy-pipeline/ingest
+Accept: application/json
+Content-Type: application/json
+
+{
+  "source_path": "E:\\data\\18、管理制度\\资产评估--报告审核制度.docx",
+  "policy_category": "管理制度",
+  "responsible_department": "综合管理部",
+  "version_label": "20231123"
+}
