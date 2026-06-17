@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "Bid Document Agent"
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api/v1"
+    policy_pipeline_workspace: str = ".runtime/policy_pipeline"
 
     postgres_db: str = "bid_document_agent"
     postgres_user: str = "admin"
