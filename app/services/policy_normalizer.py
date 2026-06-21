@@ -1,23 +1,28 @@
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 from app.schemas.policy_pipeline import FormatNormalizationResult, RegisteredFileInfo
 
 
 class PolicyFormatNormalizer:
-    """Normalize legacy .doc files into standard .docx files."""
+    """把旧版 `.doc` 标准化为 `.docx`。"""
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root
 
     def normalize(self, registered_file: RegisteredFileInfo) -> FormatNormalizationResult:
         """
-        Convert a legacy Word document into a `.docx` derivative.
+        步骤 3：把旧版 Word 文档转换成 `.docx` 派生文件。
 
-        The original source file is never overwritten. We keep a normalized copy
-        so later parsing stages always consume a predictable format.
+        把旧版 Word 文档转换成 `.docx` 派生文件。
+
+        原始文件不会被覆盖，只会生成一个标准化副本，
+        这样后续解析阶段始终面对可预期的统一格式。
+
+        当前 MVP 只允许 `.docx` / `.pdf`，
+        所以这一步在现阶段通常表现为 `skipped`。
         """
         if registered_file.extension != ".doc":
             return FormatNormalizationResult(
@@ -67,11 +72,12 @@ class PolicyFormatNormalizer:
 
     def _convert_via_word_com(self, *, source_path: Path, output_path: Path) -> None:
         """
-        Use local Microsoft Word COM automation for format conversion on Windows.
+        在 Windows 上通过本机 Microsoft Word COM 自动化执行格式转换。
 
-        This is intentionally isolated in one method because it depends on the host
-        environment. If you later choose LibreOffice instead, you only need to
-        replace this adapter.
+        这是步骤 3 的底层适配实现，不直接暴露给上层编排器。
+
+        这里单独封装成一个方法，是因为它强依赖宿主环境。
+        如果后面改用 LibreOffice，只需要替换这一层适配器。
         """
         script = f"""
 $ErrorActionPreference = 'Stop'

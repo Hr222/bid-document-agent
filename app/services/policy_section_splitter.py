@@ -5,17 +5,19 @@ from app.schemas.policy_pipeline import CleanedTextResult, SectionSplitItem, Sec
 
 
 class PolicySectionSplitter:
-    """Split cleaned policy text into chapter/article oriented sections."""
+    """把清洗后的制度文本拆分成按章/节/条组织的 section。"""
 
     def __init__(self, structure_policy: PolicySectionStructurePolicy | None = None) -> None:
         self.structure_policy = structure_policy or PolicySectionStructurePolicy()
 
     def split(self, cleaned_text: CleanedTextResult) -> SectionSplitResult:
         """
-        Build structural sections for policy-style documents.
+        步骤 7：为制度类文档构建结构化章节。
 
-        The strategy is "structure first, length later". At this stage we only
-        care about meaningful legal/business units, not embedding chunk size.
+        为制度类文档构建结构化章节。
+
+        当前策略是“先结构、后长度”。
+        这个阶段只关心业务上有意义的章/节/条单元，不关心 embedding chunk 大小。
         """
         lines = [line for line in cleaned_text.clean_text.splitlines() if line.strip()]
         if not lines:
@@ -32,6 +34,7 @@ class PolicySectionSplitter:
         current_title: str | None = None
         current_level = 1
         current_path: list[str] = []
+        saw_heading = False
 
         def flush_section() -> None:
             if not current_lines:
@@ -47,11 +50,6 @@ class PolicySectionSplitter:
                     section_path=" / ".join(current_path) if current_path else None,
                     section_order=len(sections),
                     section_text=section_text,
-                    metadata={
-                        "section_no": current_no,
-                        "section_title": current_title,
-                        "section_level": current_level,
-                    },
                 )
             )
 
@@ -61,6 +59,7 @@ class PolicySectionSplitter:
                 current_lines.append(line)
                 continue
 
+            saw_heading = True
             flush_section()
             current_no = heading.section_no
             current_title = heading.section_title
@@ -73,8 +72,8 @@ class PolicySectionSplitter:
 
         flush_section()
 
-        if not sections:
-            sections.append(
+        if not saw_heading:
+            sections = [
                 SectionSplitItem(
                     section_no=None,
                     section_title="全文",
@@ -82,13 +81,12 @@ class PolicySectionSplitter:
                     section_path="全文",
                     section_order=0,
                     section_text=cleaned_text.clean_text,
-                    metadata={"section_title": "全文", "section_level": 1},
                 )
-            )
+            ]
 
         return SectionSplitResult(
             total_sections=len(sections),
             strategy="chapter-article",
             sections=sections,
-            notes=["Split by chapter/section/article headings where available."],
+            notes=["优先按章/节/条标题拆分；识别不到时退化为全文。"],
         )

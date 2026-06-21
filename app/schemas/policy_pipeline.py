@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 PipelineStageName = Literal[
     "file_registration",
     "intake_validation",
@@ -11,15 +10,16 @@ PipelineStageName = Literal[
     "parse_routing",
     "text_parsing",
     "text_cleaning",
-    "document_persistence",
     "section_splitting",
+    "document_persistence",
 ]
 
 PipelineStatus = Literal["pending", "skipped", "success", "failed"]
+ParserStatus = Literal["parsed", "failed"]
 
 
 class PipelineStageResult(BaseModel):
-    """Execution snapshot for one pipeline stage."""
+    """一次流水线阶段执行结果快照。"""
 
     stage: PipelineStageName
     status: PipelineStatus
@@ -27,7 +27,7 @@ class PipelineStageResult(BaseModel):
 
 
 class PolicyPipelineRequest(BaseModel):
-    """API request for running steps 1-8 of the policy ingestion pipeline."""
+    """单文件制度入库流水线的 API 请求。"""
 
     source_path: str = Field(..., min_length=1)
     policy_category: str = Field(default="管理制度", min_length=1)
@@ -36,7 +36,7 @@ class PolicyPipelineRequest(BaseModel):
 
 
 class RegisteredFileInfo(BaseModel):
-    """Result of step 1: source file registration."""
+    """步骤 1：文件登记结果。"""
 
     source_path: str
     file_name: str
@@ -47,7 +47,7 @@ class RegisteredFileInfo(BaseModel):
 
 
 class IntakeValidationResult(BaseModel):
-    """Result of step 2: decide whether the file may enter the pipeline."""
+    """步骤 2：文件是否允许进入流水线的校验结果。"""
 
     is_allowed: bool
     detected_file_kind: str
@@ -57,7 +57,7 @@ class IntakeValidationResult(BaseModel):
 
 
 class FormatNormalizationResult(BaseModel):
-    """Result of step 3: convert legacy .doc into normalized .docx."""
+    """步骤 3：格式标准化结果。"""
 
     status: PipelineStatus
     source_path: str
@@ -68,7 +68,7 @@ class FormatNormalizationResult(BaseModel):
 
 
 class ParseRoutingResult(BaseModel):
-    """Result of step 4: select the parser implementation."""
+    """步骤 4：解析器选择结果。"""
 
     parser_name: str
     parse_method: str
@@ -77,12 +77,13 @@ class ParseRoutingResult(BaseModel):
 
 
 class ParsedTextResult(BaseModel):
-    """Result of step 5: raw extraction output before cleaning."""
+    """步骤 5：文本清洗前的原始抽取结果。"""
 
-    parser_status: PipelineStatus
+    parser_status: ParserStatus
     source_path: str
     raw_text: str
     page_count: int | None = None
+    suspected_scanned: bool = False
     paragraphs: list[str]
     tables: list[str]
     title_candidates: list[str]
@@ -90,7 +91,7 @@ class ParsedTextResult(BaseModel):
 
 
 class CleanedTextResult(BaseModel):
-    """Result of step 6: cleaned text that still preserves source meaning."""
+    """步骤 6：在尽量保留原意前提下得到的清洗文本。"""
 
     clean_text: str
     page_count: int | None = None
@@ -99,18 +100,19 @@ class CleanedTextResult(BaseModel):
 
 
 class PersistenceResult(BaseModel):
-    """Result of step 7: document/version persistence status."""
+    """步骤 7：document/version/section 落库结果。"""
 
     persisted: bool
     document_id: int | None = None
     version_id: int | None = None
     version_seq: int | None = None
     version_label: str | None = None
+    section_count: int = 0
     message: str
 
 
 class SectionSplitItem(BaseModel):
-    """Section object produced by the splitter for one chapter/article node."""
+    """拆分器为单个章/节/条节点生成的 section 对象。"""
 
     section_no: str | None = None
     section_title: str | None = None
@@ -120,11 +122,10 @@ class SectionSplitItem(BaseModel):
     section_text: str
     page_start: int | None = None
     page_end: int | None = None
-    metadata: dict[str, str | int | None] = Field(default_factory=dict)
 
 
 class SectionSplitResult(BaseModel):
-    """Result of step 8: structured sections for downstream chunking."""
+    """步骤 8：供后续落库使用的结构化章节结果。"""
 
     total_sections: int
     strategy: str
@@ -133,17 +134,19 @@ class SectionSplitResult(BaseModel):
 
 
 class PolicyPipelineResponse(BaseModel):
-    """Aggregated response for the first eight pipeline stages."""
+    """单文件制度流水线的聚合响应。"""
 
     mode: Literal["preview", "ingest"]
     source_path: str
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     stages: list[PipelineStageResult]
+    policy_name_guess: str | None = None
+    derived_version_label: str | None = None
     registered_file: RegisteredFileInfo | None = None
     validation: IntakeValidationResult | None = None
     normalization: FormatNormalizationResult | None = None
     parse_routing: ParseRoutingResult | None = None
     parsed_text: ParsedTextResult | None = None
     cleaned_text: CleanedTextResult | None = None
-    persistence: PersistenceResult | None = None
     section_result: SectionSplitResult | None = None
+    persistence: PersistenceResult | None = None

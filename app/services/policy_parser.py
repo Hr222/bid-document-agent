@@ -1,20 +1,30 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 from app.schemas.policy_pipeline import ParsedTextResult, ParseRoutingResult
 
+CHINESE_HEADING_PATTERNS = (
+    r"^第[一二三四五六七八九十百千万零〇两0-9]+章.*$",
+    r"^第[一二三四五六七八九十百千万零〇两0-9]+节.*$",
+    r"^第[一二三四五六七八九十百千万零〇两0-9]+条.*$",
+)
+
 
 class PolicyParserService:
-    """Choose a parser and extract raw content from normalized files."""
+    """
+    负责制度文件的解析阶段。
+
+    - 步骤 4：解析器选择
+    - 步骤 5：原文抽取
+    """
 
     def route_parser(self, source_path: str) -> ParseRoutingResult:
         """
-        Decide which parser should handle the current file.
+        决定当前文件应交给哪个解析器处理。
 
-        This is step 4 of the pipeline and should stay lightweight. The actual
-        extraction happens in `parse`.
+        这是流水线的第 4 步，应该保持轻量；真正的文本抽取发生在 `parse`。
         """
         path = Path(source_path)
         suffix = path.suffix.lower()
@@ -37,7 +47,7 @@ class PolicyParserService:
         raise ValueError(f"No parser configured for file type: {suffix}")
 
     def parse(self, *, source_path: str, parse_method: str) -> ParsedTextResult:
-        """Extract raw text plus parser-side structure hints."""
+        """步骤 5：抽取原始文本，并附带解析阶段识别出的结构提示。"""
         if parse_method == "docx":
             return self._parse_docx(source_path)
         if parse_method == "pdf":
@@ -45,14 +55,18 @@ class PolicyParserService:
         raise ValueError(f"Unsupported parse method: {parse_method}")
 
     def _parse_docx(self, source_path: str) -> ParsedTextResult:
-        """Parse a `.docx` file into paragraphs and table rows."""
+        """步骤 5.1：将 `.docx` 文件解析成段落和表格行文本。"""
         try:
             from docx import Document
         except ImportError as exc:
             raise RuntimeError("Missing dependency: python-docx is not installed.") from exc
 
         document = Document(source_path)
-        paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+        paragraphs = [
+            paragraph.text.strip()
+            for paragraph in document.paragraphs
+            if paragraph.text.strip()
+        ]
         tables: list[str] = []
         for table in document.tables:
             for row in table.rows:
@@ -62,10 +76,11 @@ class PolicyParserService:
 
         raw_text = "\n".join(paragraphs + tables)
         return ParsedTextResult(
-            parser_status="success",
+            parser_status="parsed",
             source_path=source_path,
             raw_text=raw_text,
             page_count=None,
+            suspected_scanned=False,
             paragraphs=paragraphs,
             tables=tables,
             title_candidates=self._detect_title_candidates(paragraphs),
@@ -73,7 +88,7 @@ class PolicyParserService:
         )
 
     def _parse_pdf(self, source_path: str) -> ParsedTextResult:
-        """Parse a text PDF and flag potential image-only scans."""
+        """步骤 5.2：解析可抽文本 PDF，并标记疑似图片扫描件。"""
         try:
             from pypdf import PdfReader
         except ImportError as exc:
@@ -87,14 +102,19 @@ class PolicyParserService:
 
         raw_text = "\n".join(pages)
         paragraphs = [line.strip() for line in raw_text.splitlines() if line.strip()]
-        if len("".join(paragraphs)) < 80:
-            notes.append("Extracted text is very short; this PDF may be scan-based and need OCR later.")
+        non_whitespace_chars = len(re.sub(r"\s+", "", raw_text))
+        suspected_scanned = non_whitespace_chars < 80
+        if suspected_scanned:
+            notes.append(
+                "Extracted text is too short; this PDF is treated as a likely scan in MVP."
+            )
 
         return ParsedTextResult(
-            parser_status="success",
+            parser_status="parsed",
             source_path=source_path,
             raw_text=raw_text,
             page_count=len(reader.pages),
+            suspected_scanned=suspected_scanned,
             paragraphs=paragraphs,
             tables=[],
             title_candidates=self._detect_title_candidates(paragraphs),
@@ -102,14 +122,8 @@ class PolicyParserService:
         )
 
     def _detect_title_candidates(self, paragraphs: list[str]) -> list[str]:
-        """Collect section-like lines to help downstream structure splitting."""
-        patterns = (
-            r"^第[一二三四五六七八九十百千0-9]+章.*$",
-            r"^第[一二三四五六七八九十百千0-9]+节.*$",
-            r"^第[一二三四五六七八九十百千0-9]+条.*$",
-            r"^[一二三四五六七八九十]+、.*$",
-        )
-        compiled = [re.compile(pattern) for pattern in patterns]
+        """步骤 5 的辅助动作：收集疑似标题行，辅助后续章节拆分。"""
+        compiled = [re.compile(pattern) for pattern in CHINESE_HEADING_PATTERNS]
 
         titles: list[str] = []
         for paragraph in paragraphs:

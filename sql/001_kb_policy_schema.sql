@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS kb_policy_document (
     responsible_department TEXT,
     current_version_id BIGINT,
     latest_version_id BIGINT,
-    status TEXT NOT NULL DEFAULT 'active',
+    status TEXT NOT NULL DEFAULT 'draft',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_kb_policy_document_status

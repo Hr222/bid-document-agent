@@ -36,22 +36,3 @@ class PolicyScanResponse(BaseModel):
     scanned_at: datetime
     stats: PolicyScanStats
     candidates: list[PolicyCandidateItem]
-
-
-class PolicyPreviewRequest(BaseModel):
-    source_path: str = Field(..., min_length=1)
-
-
-class PolicyPreviewResponse(BaseModel):
-    source_path: str
-    file_name: str
-    extension: str
-    parse_method: str
-    parser_status: str
-    suspected_scanned: bool
-    page_count: int | None = None
-    raw_text_chars: int = 0
-    clean_text_chars: int = 0
-    text_preview: str = ""
-    detected_titles: list[str]
-    notes: list[str]

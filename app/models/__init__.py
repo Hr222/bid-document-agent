@@ -1,4 +1,4 @@
-"""SQLAlchemy models package."""
+"""SQLAlchemy 模型包。"""
 
 from app.models.policy import PolicyDocument, PolicySection, PolicyVersion
 

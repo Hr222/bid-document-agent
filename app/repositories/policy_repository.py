@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.policy import PolicyDocument, PolicySection, PolicyVersion
@@ -15,7 +15,7 @@ from app.schemas.policy_pipeline import (
 
 @dataclass(slots=True)
 class PersistedPolicyRecords:
-    """Value object returned after document/version/section persistence."""
+    """落库完成后返回的 document/version/section 聚合结果。"""
 
     document: PolicyDocument
     version: PolicyVersion
@@ -23,12 +23,12 @@ class PersistedPolicyRecords:
 
 
 class PolicyRepository:
-    """Repository layer for policy-related database operations."""
+    """制度知识库相关的仓储层。"""
 
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def save_document_version(
+    def save_document_version_and_sections(
         self,
         *,
         policy_name: str,
@@ -41,59 +41,48 @@ class PolicyRepository:
         is_scanned: bool,
         raw_text: str,
         cleaned_text: CleanedTextResult,
+        sections: list[SectionSplitItem],
     ) -> PersistedPolicyRecords:
         """
-        Persist the source document root and its new version.
+        在一个事务里落库 document、version 和 sections。
 
-        This is the stage-7 repository entry point. We intentionally stop at the
-        version layer so stage 8 can be retried independently later.
+        这里是当前 MVP 的事务边界。任一阶段失败都必须整体回滚，
+        不能留下半成品 document/version 数据。
         """
-        document = self._get_or_create_document(
-            policy_name=policy_name,
-            policy_category=policy_category,
-            responsible_department=responsible_department,
-        )
-        version = self._create_version(
-            document=document,
-            registered_file=registered_file,
-            version_label=version_label,
-            parse_method=parse_method,
-            parser_status=parser_status,
-            is_scanned=is_scanned,
-            raw_text=raw_text,
-            cleaned_text=cleaned_text,
-        )
-        document.latest_version_id = version.id
-        if document.current_version_id is None:
-            document.current_version_id = version.id
-            version.version_status = "active"
-            document.status = "active"
+        try:
+            document = self._get_or_create_document(
+                policy_name=policy_name,
+                policy_category=policy_category,
+                responsible_department=responsible_department,
+            )
+            version = self._create_version(
+                document=document,
+                registered_file=registered_file,
+                version_label=version_label,
+                parse_method=parse_method,
+                parser_status=parser_status,
+                is_scanned=is_scanned,
+                raw_text=raw_text,
+                cleaned_text=cleaned_text,
+            )
+            persisted_sections = self._create_sections(
+                version=version,
+                sections=sections,
+            )
+            document.latest_version_id = version.id
 
-        self.session.add(document)
-        self.session.commit()
-        self.session.refresh(document)
-        self.session.refresh(version)
-        return PersistedPolicyRecords(document=document, version=version, sections=[])
-
-    def replace_sections_for_version(
-        self,
-        *,
-        version_id: int,
-        sections: list[SectionSplitItem],
-    ) -> list[PolicySection]:
-        """
-        Replace all sections for one already-persisted version.
-
-        This is the stage-8 repository entry point. Keeping it separate from
-        stage 7 avoids duplicate version creation when the splitter is rerun.
-        """
-        version = self.session.get(PolicyVersion, version_id)
-        if version is None:
-            raise ValueError(f"Policy version not found: {version_id}")
-
-        persisted_sections = self._replace_sections(version=version, sections=sections)
-        self.session.commit()
-        return persisted_sections
+            self.session.add(document)
+            self.session.commit()
+            self.session.refresh(document)
+            self.session.refresh(version)
+            return PersistedPolicyRecords(
+                document=document,
+                version=version,
+                sections=persisted_sections,
+            )
+        except Exception:
+            self.session.rollback()
+            raise
 
     def _get_or_create_document(
         self,
@@ -103,10 +92,9 @@ class PolicyRepository:
         responsible_department: str | None,
     ) -> PolicyDocument:
         """
-        Reuse an existing policy main document when name/category match.
+        当制度名和分类命中时，复用已有主档。
 
-        For the first engineering stage, this is a practical dedupe rule.
-        Later we can evolve it to use policy_code or a formal business key.
+        这就是当前 MVP 明确采用的主档匹配规则。
         """
         statement = (
             select(PolicyDocument)
@@ -121,9 +109,12 @@ class PolicyRepository:
             return document
 
         document = PolicyDocument(
+            policy_code=None,
             policy_name=policy_name,
             policy_category=policy_category,
             responsible_department=responsible_department,
+            current_version_id=None,
+            latest_version_id=None,
             status="draft",
         )
         self.session.add(document)
@@ -142,16 +133,33 @@ class PolicyRepository:
         raw_text: str,
         cleaned_text: CleanedTextResult,
     ) -> PolicyVersion:
-        """Create one concrete version row for the current source file."""
+        """为当前源文件创建一条具体的版本记录。"""
         current_max_seq = self.session.scalar(
-            select(func.max(PolicyVersion.version_seq)).where(PolicyVersion.policy_id == document.id)
+            select(func.max(PolicyVersion.version_seq)).where(
+                PolicyVersion.policy_id == document.id
+            )
         )
         next_seq = (current_max_seq or 0) + 1
+        previous_version_id = document.latest_version_id
+        resolved_version_label = self._ensure_unique_version_label(
+            policy_id=document.id,
+            version_label=version_label,
+        )
 
         version = PolicyVersion(
             policy_id=document.id,
             version_seq=next_seq,
-            version_label=version_label,
+            version_label=resolved_version_label,
+            source_year=registered_file.source_modified_at.year,
+            source_document_date=None,
+            issued_at=None,
+            effective_date=None,
+            expired_at=None,
+            previous_version_id=previous_version_id,
+            revision_type="initial" if previous_version_id is None else "revise",
+            version_status="draft",
+            change_summary=None,
+            change_reason=None,
             source_path=registered_file.source_path,
             file_name=registered_file.file_name,
             file_ext=registered_file.extension,
@@ -162,27 +170,40 @@ class PolicyRepository:
             clean_text=cleaned_text.clean_text,
             page_count=cleaned_text.page_count,
             parser_status=parser_status,
-            version_status="draft",
         )
         self.session.add(version)
         self.session.flush()
         return version
 
-    def _replace_sections(
+    def _ensure_unique_version_label(self, *, policy_id: int, version_label: str) -> str:
+        """Keep version labels unique within one document while preserving the base label."""
+        normalized = version_label.strip()
+        if not normalized:
+            raise ValueError("version_label cannot be blank before persistence.")
+
+        existing_labels = {
+            label
+            for label in self.session.scalars(
+                select(PolicyVersion.version_label).where(PolicyVersion.policy_id == policy_id)
+            )
+        }
+        if normalized not in existing_labels:
+            return normalized
+
+        suffix = 2
+        while True:
+            candidate = f"{normalized}-{suffix}"
+            if candidate not in existing_labels:
+                return candidate
+            suffix += 1
+
+    def _create_sections(
         self,
         *,
         version: PolicyVersion,
         sections: list[SectionSplitItem],
     ) -> list[PolicySection]:
-        """
-        Replace all sections for the version with the latest split result.
-
-        This keeps re-running the section splitter idempotent for one version.
-        """
-        self.session.execute(
-            delete(PolicySection).where(PolicySection.version_id == version.id)
-        )
-
+        """为一个版本落库拆分后的章节记录。"""
         persisted_sections: list[PolicySection] = []
         for item in sections:
             section = PolicySection(
@@ -197,7 +218,6 @@ class PolicyRepository:
                 page_end=item.page_end,
                 section_text=item.section_text,
                 review_status="pending",
-                metadata_json=item.metadata,
             )
             self.session.add(section)
             persisted_sections.append(section)
