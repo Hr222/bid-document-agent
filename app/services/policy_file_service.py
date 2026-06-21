@@ -9,16 +9,16 @@ from app.schemas.policy_pipeline import IntakeValidationResult, RegisteredFileIn
 
 
 class PolicyFileService:
-    """Handle source file registration and delegate intake rules to the domain."""
+    """处理源文件登记，并把 intake 规则委托给领域层。"""
 
     def __init__(self, intake_policy: PolicyIntakePolicy | None = None) -> None:
         self.intake_policy = intake_policy or PolicyIntakePolicy()
 
     def register_file(self, source_path: str) -> RegisteredFileInfo:
         """
-        Read immutable source metadata.
+        读取源文件的不可变元数据。
 
-        This corresponds to step 1 in the pipeline and should not modify any file.
+        对应流水线步骤 1，本方法不应修改任何源文件内容。
         """
         path = Path(source_path)
         if not path.exists():
@@ -38,10 +38,9 @@ class PolicyFileService:
 
     def validate_intake(self, registered_file: RegisteredFileInfo) -> IntakeValidationResult:
         """
-        Run lightweight gate checks before parsing.
+        步骤 2：在正式解析前执行轻量级 intake 准入校验。
 
-        Business admission rules belong to the domain policy. The service only
-        converts the domain decision into the pipeline DTO used by the API layer.
+        业务准入规则属于领域层，这里只负责把领域决策转换成 API 可返回的 DTO。
         """
         decision = self.intake_policy.decide(
             file_name=registered_file.file_name,
@@ -57,7 +56,7 @@ class PolicyFileService:
         )
 
     def _hash_file(self, path: Path) -> str:
-        """Calculate a stable SHA-256 hash for dedupe and traceability."""
+        """计算稳定的 SHA-256，用于去重和溯源。"""
         digest = sha256()
         with path.open("rb") as file:
             for chunk in iter(lambda: file.read(1024 * 1024), b""):

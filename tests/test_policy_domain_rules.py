@@ -13,11 +13,31 @@ def test_policy_intake_policy_accepts_docx() -> None:
     assert decision.recommended_parse_method == "docx"
 
 
+def test_policy_intake_policy_rejects_doc() -> None:
+    decision = PolicyIntakePolicy().decide(
+        file_name="旧制度.doc",
+        extension=".doc",
+        size_bytes=1024,
+    )
+
+    assert decision.is_allowed is False
+    assert decision.recommended_parse_method == "skip"
+
+
 def test_policy_identity_policy_derives_name_and_version() -> None:
     policy = PolicyIdentityPolicy()
 
-    assert policy.guess_policy_name(file_name="资产评估--报告审核制度.docx") == "资产评估-报告审核制度"
-    assert policy.build_version_label(explicit_label=None, modified_at_text="20260617") == "20260617"
+    assert (
+        policy.guess_policy_name(file_name="资产评估--报告审核制度.docx")
+        == "资产评估-报告审核制度"
+    )
+    assert (
+        policy.build_version_label(
+            explicit_label=None,
+            modified_at_text="20260617",
+        )
+        == "20260617"
+    )
 
 
 def test_policy_section_structure_policy_matches_article_heading() -> None:

@@ -2,6 +2,8 @@ from app.schemas.knowledge_base import KnowledgeBaseOverview, RagMvpStatus
 
 
 class KnowledgeBaseService:
+    """知识库概览服务，用于返回项目阶段信息，不参与制度入库主流水线。"""
+
     def get_overview(self) -> KnowledgeBaseOverview:
         return KnowledgeBaseOverview(
             phase="rag-mvp",

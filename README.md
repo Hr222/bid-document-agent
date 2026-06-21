@@ -214,7 +214,7 @@
 安装依赖后，可使用如下方式启动：
 
 ```bash
-uvicorn main:app --reload
+uvicorn app.main:app --reload
 ```
 
 启动后访问：
