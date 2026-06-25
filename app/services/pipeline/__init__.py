@@ -1,4 +1,4 @@
-"""兼容旧导入路径，真实编排实现位于 app.services.pipeline。"""
+"""流水线编排包。"""
 
 from app.services.pipeline.policy_pipeline import PolicyPipelineService
 

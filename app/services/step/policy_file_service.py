@@ -22,9 +22,9 @@ class PolicyFileService:
         """
         path = Path(source_path)
         if not path.exists():
-            raise FileNotFoundError(f"Source file does not exist: {source_path}")
+            raise FileNotFoundError(f"源文件不存在：{source_path}")
         if not path.is_file():
-            raise IsADirectoryError(f"Source path is not a file: {source_path}")
+            raise IsADirectoryError(f"源路径不是文件：{source_path}")
 
         stat = path.stat()
         return RegisteredFileInfo(

@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas.policy_pipeline import PolicyPipelineRequest, PolicyPipelineResponse
 from app.schemas.policy_upload import PolicyUploadIngestRequest, PolicyUploadPreviewResponse
-from app.services.policy_pipeline import PolicyPipelineService
+from app.services.pipeline import PolicyPipelineService
 from app.services.policy_upload_service import PolicyUploadService
 
 router = APIRouter()
@@ -20,7 +20,7 @@ def _upload_service() -> PolicyUploadService:
 
 @router.post("/policy-pipeline/preview", response_model=PolicyPipelineResponse)
 async def preview_policy_pipeline(request: PolicyPipelineRequest) -> PolicyPipelineResponse:
-    """执行 1 到 8 阶段的流水线，但不写入数据库。"""
+    """执行预览流水线，不写入数据库。"""
     service = PolicyPipelineService()
     try:
         return service.preview(request)
@@ -33,7 +33,7 @@ async def ingest_policy_pipeline(
     request: PolicyPipelineRequest,
     session: Session = Depends(get_db_session),
 ) -> PolicyPipelineResponse:
-    """执行 1 到 8 阶段的流水线，并落库 document/version/section。"""
+    """执行完整流水线，并写入制度文档、版本、章节和切块。"""
     service = PolicyPipelineService(repository=PolicyRepository(session))
     try:
         return service.ingest(request)

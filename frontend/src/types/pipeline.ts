@@ -13,6 +13,13 @@ export type SectionItem = {
   section_text: string;
 };
 
+export type ChunkSampleItem = {
+  section_title: string | null;
+  section_path: string | null;
+  chunk_preview: string;
+  char_count: number;
+};
+
 export type PipelineResponse = {
   mode: "preview" | "ingest";
   source_path: string;
@@ -38,6 +45,12 @@ export type PipelineResponse = {
     notes: string[];
     sections: SectionItem[];
   } | null;
+  chunk_result?: {
+    total_chunks: number;
+    strategy: string;
+    notes: string[];
+    sample_chunks: ChunkSampleItem[];
+  } | null;
   persistence?: {
     persisted: boolean;
     document_id: number | null;
@@ -45,6 +58,7 @@ export type PipelineResponse = {
     version_seq: number | null;
     version_label: string | null;
     section_count: number;
+    chunk_count: number;
     message: string;
   } | null;
 };

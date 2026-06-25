@@ -1,1 +1,1 @@
-"""Pydantic schema package."""
+"""接口模型包。"""

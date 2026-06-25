@@ -3,6 +3,7 @@ venv/
 env/
 ENV/
 
+.runtime/
 .idea/
 *.iml
 .vscode/

@@ -47,9 +47,9 @@ class PolicyIngestionService:
         """
         root = Path(request.source_root)
         if not root.exists():
-            raise FileNotFoundError(f"Source root does not exist: {root}")
+            raise FileNotFoundError(f"扫描目录不存在：{root}")
         if not root.is_dir():
-            raise NotADirectoryError(f"Source root is not a directory: {root}")
+            raise NotADirectoryError(f"扫描路径不是目录：{root}")
 
         files = sorted(path for path in root.rglob("*") if path.is_file())
         counts = Counter(path.suffix.lower() or "<none>" for path in files)
@@ -94,28 +94,28 @@ class PolicyIngestionService:
         if path.stat().st_size == 0:
             recommended_action = "exclude"
             parse_method = "skip"
-            exclude_reason = "Empty file."
+            exclude_reason = "空文件。"
         elif extension in self._excluded_extensions:
             recommended_action = "exclude"
             parse_method = "skip"
-            exclude_reason = "Image or archive file is excluded in the first batch."
+            exclude_reason = "图片或压缩包不在首批范围内。"
         elif self._contains_keyword(full_text, self._excluded_keywords):
             recommended_action = "exclude"
             parse_method = "skip"
-            exclude_reason = "Matched the first-batch exclusion keyword rule."
+            exclude_reason = "命中首批排除关键字规则。"
         elif extension not in self._supported_extensions:
             recommended_action = "exclude"
             parse_method = "skip"
             include_reason = None
-            exclude_reason = "Unsupported file type for the first-batch MVP."
+            exclude_reason = "该文件类型不在首批 MVP 支持范围内。"
         elif suspected_scanned:
             recommended_action = "review"
             parse_method = "ocr"
-            include_reason = "PDF may be scan-based and is outside the native-text MVP scope."
+            include_reason = "该 PDF 疑似扫描件，不在当前原生文本 MVP 范围内。"
         else:
             recommended_action = "include"
             parse_method = "direct"
-            include_reason = "Native text file suitable for first-batch ingestion."
+            include_reason = "原生文本文件，适合纳入首批入库。"
 
         return PolicyCandidateItem(
             source_path=str(path),

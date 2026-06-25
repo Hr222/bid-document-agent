@@ -25,7 +25,7 @@ class PolicySectionSplitter:
                 total_sections=0,
                 strategy="chapter-article",
                 sections=[],
-                notes=["No content available after cleaning."],
+                notes=["清洗后没有可用内容。"],
             )
 
         sections: list[SectionSplitItem] = []
