@@ -89,7 +89,7 @@ export default function App() {
   return (
     <main className="page-shell">
       <section className="page-header">
-        <p className="eyebrow">Bid Document Agent</p>
+        <p className="eyebrow">{UI_TEXT.appEyebrow}</p>
         <h1>{UI_TEXT.appTitle}</h1>
         <p className="lede">{UI_TEXT.appIntro}</p>
       </section>

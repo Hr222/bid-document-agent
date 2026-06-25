@@ -44,7 +44,7 @@ class PolicyParserService:
                 notes=[],
             )
 
-        raise ValueError(f"No parser configured for file type: {suffix}")
+        raise ValueError(f"当前文件类型未配置解析器：{suffix}")
 
     def parse(self, *, source_path: str, parse_method: str) -> ParsedTextResult:
         """步骤 5：抽取原始文本，并附带解析阶段识别出的结构提示。"""
@@ -52,14 +52,14 @@ class PolicyParserService:
             return self._parse_docx(source_path)
         if parse_method == "pdf":
             return self._parse_pdf(source_path)
-        raise ValueError(f"Unsupported parse method: {parse_method}")
+        raise ValueError(f"不支持的解析方式：{parse_method}")
 
     def _parse_docx(self, source_path: str) -> ParsedTextResult:
         """步骤 5.1：将 `.docx` 文件解析成段落和表格行文本。"""
         try:
             from docx import Document
         except ImportError as exc:
-            raise RuntimeError("Missing dependency: python-docx is not installed.") from exc
+            raise RuntimeError("缺少依赖：未安装 python-docx。") from exc
 
         document = Document(source_path)
         paragraphs = [
@@ -92,7 +92,7 @@ class PolicyParserService:
         try:
             from pypdf import PdfReader
         except ImportError as exc:
-            raise RuntimeError("Missing dependency: pypdf is not installed.") from exc
+            raise RuntimeError("缺少依赖：未安装 pypdf。") from exc
 
         reader = PdfReader(source_path)
         pages: list[str] = []
@@ -106,7 +106,7 @@ class PolicyParserService:
         suspected_scanned = non_whitespace_chars < 80
         if suspected_scanned:
             notes.append(
-                "Extracted text is too short; this PDF is treated as a likely scan in MVP."
+                "提取文本过短，当前 MVP 将该 PDF 视为疑似扫描件。"
             )
 
         return ParsedTextResult(

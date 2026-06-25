@@ -17,6 +17,22 @@ function renderList(items: string[] | undefined, emptyText: string) {
   );
 }
 
+function renderMode(mode: PipelineResponse["mode"]) {
+  return UI_TEXT.modeLabels[mode] ?? mode;
+}
+
+function renderStage(stage: string) {
+  return UI_TEXT.stageLabels[stage as keyof typeof UI_TEXT.stageLabels] ?? stage;
+}
+
+function renderStatus(status: string) {
+  return UI_TEXT.statusLabels[status as keyof typeof UI_TEXT.statusLabels] ?? status;
+}
+
+function renderStrategy(strategy: string) {
+  return UI_TEXT.strategyLabels[strategy as keyof typeof UI_TEXT.strategyLabels] ?? strategy;
+}
+
 export function ResultPanel({ result }: ResultPanelProps) {
   return (
     <section className="panel result-panel">
@@ -30,7 +46,7 @@ export function ResultPanel({ result }: ResultPanelProps) {
           <div className="summary-grid">
             <article className="metric">
               <span>{UI_TEXT.mode}</span>
-              <strong>{result.mode}</strong>
+              <strong>{renderMode(result.mode)}</strong>
             </article>
             <article className="metric">
               <span>{UI_TEXT.guessedName}</span>
@@ -55,10 +71,10 @@ export function ResultPanel({ result }: ResultPanelProps) {
                   className={`stage-item ${stage.status}`}
                 >
                   <div>
-                    <strong>{stage.stage}</strong>
+                    <strong>{renderStage(stage.stage)}</strong>
                     <p>{stage.message}</p>
                   </div>
-                  <span>{stage.status}</span>
+                  <span>{renderStatus(stage.status)}</span>
                 </article>
               ))}
             </div>
@@ -95,12 +111,38 @@ export function ResultPanel({ result }: ResultPanelProps) {
           </div>
 
           <div className="result-block">
+            <h3>{UI_TEXT.chunkPreview}</h3>
+            <div className="section-list">
+              {result.chunk_result?.sample_chunks?.length ? (
+                result.chunk_result.sample_chunks.map((chunk, index) => (
+                  <article key={`${chunk.section_path ?? "chunk"}-${index}`} className="section-item">
+                    <div className="section-meta">
+                      <strong>{chunk.section_title ?? UI_TEXT.fullText}</strong>
+                      <span>{chunk.section_path ?? UI_TEXT.noSectionPath}</span>
+                      <span>{UI_TEXT.charCount}: {chunk.char_count}</span>
+                    </div>
+                    <p>{chunk.chunk_preview}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-state">{UI_TEXT.noChunksYet}</p>
+              )}
+            </div>
+            {result.chunk_result ? (
+              <div className="persistence-meta">
+                <span>{UI_TEXT.chunkCount}: {result.chunk_result.total_chunks}</span>
+                <span>{UI_TEXT.chunkStrategy}: {renderStrategy(result.chunk_result.strategy)}</span>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="result-block">
             <h3>{UI_TEXT.sectionPreview}</h3>
             <div className="section-list">
               {(result.section_result?.sections?.length
                 ? result.section_result.sections.slice(0, 6)
-                : []
-              ).map((section) => (
+                : [])
+              .map((section) => (
                 <article
                   key={`${section.section_order}-${section.section_title ?? "full"}`}
                   className="section-item"
@@ -124,10 +166,11 @@ export function ResultPanel({ result }: ResultPanelProps) {
               <div className="persistence-box">
                 <p>{result.persistence.message}</p>
                 <div className="persistence-meta">
-                  <span>document_id: {result.persistence.document_id ?? "-"}</span>
-                  <span>version_id: {result.persistence.version_id ?? "-"}</span>
-                  <span>version_seq: {result.persistence.version_seq ?? "-"}</span>
-                  <span>section_count: {result.persistence.section_count}</span>
+                  <span>{UI_TEXT.documentId}: {result.persistence.document_id ?? "-"}</span>
+                  <span>{UI_TEXT.versionId}: {result.persistence.version_id ?? "-"}</span>
+                  <span>{UI_TEXT.versionSeq}: {result.persistence.version_seq ?? "-"}</span>
+                  <span>{UI_TEXT.sectionCount}: {result.persistence.section_count}</span>
+                  <span>{UI_TEXT.chunkCount}: {result.persistence.chunk_count}</span>
                 </div>
               </div>
             ) : (

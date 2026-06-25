@@ -15,7 +15,7 @@ def create_app() -> FastAPI:
     @application.get("/", tags=["system"])
     async def root() -> dict[str, str]:
         return {
-            "message": "Bid Document Agent API",
+            "message": "投标文档助手接口",
             "phase": "rag-mvp",
             "frontend": "/frontend",
         }

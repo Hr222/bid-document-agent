@@ -31,7 +31,7 @@ class PolicyFormatNormalizer:
                 normalized_path=registered_file.source_path,
                 output_extension=registered_file.extension,
                 converter="none",
-                message="Normalization is only required for legacy .doc files.",
+                message="只有旧版 .doc 文件才需要归一化。",
             )
 
         source_path = Path(registered_file.source_path)
@@ -46,7 +46,7 @@ class PolicyFormatNormalizer:
                 normalized_path=str(output_path),
                 output_extension=".docx",
                 converter="powershell-word-com",
-                message="Reused an existing normalized .docx file.",
+                message="已复用现有的归一化 .docx 文件。",
             )
 
         try:
@@ -67,7 +67,7 @@ class PolicyFormatNormalizer:
             normalized_path=str(output_path),
             output_extension=".docx",
             converter="powershell-word-com",
-            message="Converted legacy .doc into normalized .docx.",
+            message="已将旧版 .doc 转换为归一化 .docx 文件。",
         )
 
     def _convert_via_word_com(self, *, source_path: Path, output_path: Path) -> None:
@@ -98,5 +98,5 @@ $word.Quit()
             check=False,
         )
         if result.returncode != 0:
-            stderr = result.stderr.strip() or result.stdout.strip() or "Unknown conversion error."
-            raise RuntimeError(f"Failed to convert .doc to .docx: {stderr}")
+            stderr = result.stderr.strip() or result.stdout.strip() or "未知转换错误。"
+            raise RuntimeError(f"将 .doc 转换为 .docx 失败：{stderr}")

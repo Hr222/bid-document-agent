@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1-mini"
     embedding_model: str = "text-embedding-3-small"
     vector_dimensions: int = 1536
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    chunk_target_chars: int = 1200
+    chunk_overlap_chars: int = 120
+    embedding_batch_size: int = 16
 
     model_config = SettingsConfigDict(
         env_file=".env",

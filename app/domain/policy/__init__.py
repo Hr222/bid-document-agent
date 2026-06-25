@@ -1,6 +1,7 @@
 """Policy domain package."""
 
 from app.domain.policy.rules import (
+    PolicyChunkingPolicy,
     PolicyIdentityPolicy,
     PolicyIntakeDecision,
     PolicyIntakePolicy,
@@ -8,6 +9,7 @@ from app.domain.policy.rules import (
 )
 
 __all__ = [
+    "PolicyChunkingPolicy",
     "PolicyIdentityPolicy",
     "PolicyIntakeDecision",
     "PolicyIntakePolicy",

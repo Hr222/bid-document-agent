@@ -5,30 +5,27 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.policy import PolicyDocument, PolicySection, PolicyVersion
-from app.schemas.policy_pipeline import (
-    CleanedTextResult,
-    RegisteredFileInfo,
-    SectionSplitItem,
-)
+from app.models.policy import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
+from app.schemas.policy_pipeline import ChunkItem, CleanedTextResult, RegisteredFileInfo, SectionSplitItem
 
 
 @dataclass(slots=True)
 class PersistedPolicyRecords:
-    """落库完成后返回的 document/version/section 聚合结果。"""
+    """聚合返回本次落库产生的记录。"""
 
     document: PolicyDocument
     version: PolicyVersion
     sections: list[PolicySection]
+    chunks: list[PolicyChunk]
 
 
 class PolicyRepository:
-    """制度知识库相关的仓储层。"""
+    """制度知识库落库仓储。"""
 
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def save_document_version_and_sections(
+    def save_document_version_sections_and_chunks(
         self,
         *,
         policy_name: str,
@@ -42,13 +39,9 @@ class PolicyRepository:
         raw_text: str,
         cleaned_text: CleanedTextResult,
         sections: list[SectionSplitItem],
+        chunks: list[ChunkItem],
     ) -> PersistedPolicyRecords:
-        """
-        在一个事务里落库 document、version 和 sections。
-
-        这里是当前 MVP 的事务边界。任一阶段失败都必须整体回滚，
-        不能留下半成品 document/version 数据。
-        """
+        """在一个事务里保存 document、version、section、chunk。"""
         try:
             document = self._get_or_create_document(
                 policy_name=policy_name,
@@ -65,9 +58,11 @@ class PolicyRepository:
                 raw_text=raw_text,
                 cleaned_text=cleaned_text,
             )
-            persisted_sections = self._create_sections(
+            persisted_sections = self._create_sections(version=version, sections=sections)
+            persisted_chunks = self._create_chunks(
                 version=version,
-                sections=sections,
+                sections=persisted_sections,
+                chunks=chunks,
             )
             document.latest_version_id = version.id
 
@@ -79,6 +74,7 @@ class PolicyRepository:
                 document=document,
                 version=version,
                 sections=persisted_sections,
+                chunks=persisted_chunks,
             )
         except Exception:
             self.session.rollback()
@@ -91,11 +87,6 @@ class PolicyRepository:
         policy_category: str,
         responsible_department: str | None,
     ) -> PolicyDocument:
-        """
-        当制度名和分类命中时，复用已有主档。
-
-        这就是当前 MVP 明确采用的主档匹配规则。
-        """
         statement = (
             select(PolicyDocument)
             .where(PolicyDocument.policy_name == policy_name)
@@ -133,7 +124,6 @@ class PolicyRepository:
         raw_text: str,
         cleaned_text: CleanedTextResult,
     ) -> PolicyVersion:
-        """为当前源文件创建一条具体的版本记录。"""
         current_max_seq = self.session.scalar(
             select(func.max(PolicyVersion.version_seq)).where(
                 PolicyVersion.policy_id == document.id
@@ -176,10 +166,9 @@ class PolicyRepository:
         return version
 
     def _ensure_unique_version_label(self, *, policy_id: int, version_label: str) -> str:
-        """Keep version labels unique within one document while preserving the base label."""
         normalized = version_label.strip()
         if not normalized:
-            raise ValueError("version_label cannot be blank before persistence.")
+            raise ValueError("落库前版本标签不能为空。")
 
         existing_labels = {
             label
@@ -203,7 +192,6 @@ class PolicyRepository:
         version: PolicyVersion,
         sections: list[SectionSplitItem],
     ) -> list[PolicySection]:
-        """为一个版本落库拆分后的章节记录。"""
         persisted_sections: list[PolicySection] = []
         for item in sections:
             section = PolicySection(
@@ -224,3 +212,38 @@ class PolicyRepository:
 
         self.session.flush()
         return persisted_sections
+
+    def _create_chunks(
+        self,
+        *,
+        version: PolicyVersion,
+        sections: list[PolicySection],
+        chunks: list[ChunkItem],
+    ) -> list[PolicyChunk]:
+        # 先拿到 section 的真实主键，再补进 chunk metadata。
+        section_by_order = {section.section_order: section for section in sections}
+        persisted_chunks: list[PolicyChunk] = []
+
+        for item in chunks:
+            if item.embedding is None:
+                raise RuntimeError("切块在落库前缺少向量。")
+
+            section = section_by_order.get(item.section_order)
+            metadata = {
+                **item.metadata,
+                "section_id": section.id if section is not None else None,
+            }
+            chunk = PolicyChunk(
+                version_id=version.id,
+                section_id=section.id if section is not None else None,
+                chunk_index=item.chunk_index,
+                page_no=item.page_no,
+                chunk_text=item.chunk_text,
+                embedding=item.embedding,
+                chunk_metadata=metadata,
+            )
+            self.session.add(chunk)
+            persisted_chunks.append(chunk)
+
+        self.session.flush()
+        return persisted_chunks

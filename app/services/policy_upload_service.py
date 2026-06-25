@@ -27,7 +27,7 @@ class PolicyUploadService:
     def stage_upload(self, upload: UploadFile) -> StagedUpload:
         file_name = Path(upload.filename or "").name
         if not file_name:
-            raise ValueError("Uploaded file must have a file name.")
+            raise ValueError("上传文件必须包含文件名。")
 
         upload_id = uuid.uuid4().hex
         target_dir = self.upload_root / upload_id
@@ -41,7 +41,7 @@ class PolicyUploadService:
         size_bytes = target_path.stat().st_size
         if size_bytes <= 0:
             target_path.unlink(missing_ok=True)
-            raise ValueError("Uploaded file is empty.")
+            raise ValueError("上传文件不能为空。")
 
         return StagedUpload(
             upload_id=upload_id,
@@ -53,16 +53,16 @@ class PolicyUploadService:
     def resolve_upload(self, upload_id: str) -> str:
         normalized_id = upload_id.strip()
         if not normalized_id:
-            raise ValueError("upload_id is required.")
+            raise ValueError("upload_id 不能为空。")
 
         target_dir = self.upload_root / normalized_id
         if not target_dir.exists() or not target_dir.is_dir():
-            raise FileNotFoundError(f"Uploaded file does not exist for upload_id: {upload_id}")
+            raise FileNotFoundError(f"upload_id 对应的上传文件不存在：{upload_id}")
 
         files = [path for path in target_dir.iterdir() if path.is_file()]
         if not files:
-            raise FileNotFoundError(f"No staged file found for upload_id: {upload_id}")
+            raise FileNotFoundError(f"未找到 upload_id 对应的暂存文件：{upload_id}")
         if len(files) > 1:
-            raise RuntimeError(f"Multiple staged files found for upload_id: {upload_id}")
+            raise RuntimeError(f"upload_id 对应了多个暂存文件：{upload_id}")
 
         return str(files[0])

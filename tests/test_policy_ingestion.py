@@ -1,14 +1,21 @@
 import uuid
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import get_db_session
 from app.core.config import settings
+from app.db.base import Base
 from app.main import app
-from app.models import PolicyDocument, PolicySection, PolicyVersion
+from app.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
+from app.schemas.policy_pipeline import ParsedTextResult, SectionSplitItem, SectionSplitResult
+from app.services.policy_chunking import PolicyChunkingService
+from app.services.policy_embedding import PolicyEmbeddingService
+from app.services.policy_parser import PolicyParserService
+from app.domain.policy import PolicyChunkingPolicy
 
 
 def _create_docx(path: Path, paragraphs: list[str]) -> None:
@@ -30,10 +37,8 @@ def _build_pdf_parse_result(
     raw_text: str,
     page_count: int = 1,
     suspected_scanned: bool = False,
-):
-    from app.schemas.policy_pipeline import ParsedTextResult
-
-    paragraphs = [line for line in raw_text.splitlines() if line.strip()]
+) -> ParsedTextResult:
+    paragraphs = [line.strip() for line in raw_text.splitlines() if line.strip()]
     notes: list[str] = []
     if suspected_scanned:
         notes.append(
@@ -63,153 +68,21 @@ TEST_ENGINE = create_engine(
 TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit=False)
 
 with TEST_ENGINE.begin() as conn:
+    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}"))
-    conn.execute(text("SET search_path TO public"))
-    conn.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS kb_policy_document (
-                id BIGSERIAL PRIMARY KEY,
-                policy_code TEXT UNIQUE,
-                policy_name TEXT NOT NULL,
-                policy_category TEXT NOT NULL,
-                responsible_department TEXT,
-                current_version_id BIGINT,
-                latest_version_id BIGINT,
-                status TEXT NOT NULL DEFAULT 'draft',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                CONSTRAINT chk_kb_policy_document_status
-                    CHECK (status IN ('draft', 'active', 'archived'))
-            )
-            """
-        )
-    )
-    conn.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS kb_policy_version (
-                id BIGSERIAL PRIMARY KEY,
-                policy_id BIGINT NOT NULL REFERENCES kb_policy_document(id) ON DELETE CASCADE,
-                version_seq INTEGER NOT NULL,
-                version_label TEXT NOT NULL,
-                source_year INTEGER,
-                source_document_date DATE,
-                issued_at DATE,
-                effective_date DATE,
-                expired_at DATE,
-                previous_version_id BIGINT,
-                revision_type TEXT NOT NULL DEFAULT 'revise',
-                version_status TEXT NOT NULL DEFAULT 'draft',
-                change_summary TEXT,
-                change_reason TEXT,
-                source_path TEXT NOT NULL,
-                file_name TEXT NOT NULL,
-                file_ext TEXT,
-                file_hash TEXT,
-                is_scanned BOOLEAN NOT NULL DEFAULT FALSE,
-                parse_method TEXT NOT NULL DEFAULT 'direct',
-                raw_text TEXT,
-                clean_text TEXT,
-                page_count INTEGER,
-                parser_status TEXT NOT NULL DEFAULT 'pending',
-                ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                reviewed_at TIMESTAMPTZ,
-                approved_at TIMESTAMPTZ,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                CONSTRAINT uq_kb_policy_version_id_policy UNIQUE (id, policy_id),
-                CONSTRAINT uq_kb_policy_version_seq UNIQUE (policy_id, version_seq),
-                CONSTRAINT uq_kb_policy_version_label UNIQUE (policy_id, version_label),
-                CONSTRAINT uq_kb_policy_version_file_hash UNIQUE (policy_id, file_hash),
-                CONSTRAINT chk_kb_policy_version_seq_positive CHECK (version_seq > 0),
-                CONSTRAINT chk_kb_policy_version_year CHECK (
-                    source_year IS NULL OR source_year BETWEEN 1900 AND 2100
-                ),
-                CONSTRAINT chk_kb_policy_version_dates CHECK (
-                    expired_at IS NULL
-                    OR effective_date IS NULL
-                    OR expired_at >= effective_date
-                ),
-                CONSTRAINT chk_kb_policy_version_revision_type CHECK (
-                    revision_type IN ('initial', 'revise', 'replace', 'supplement', 'abolish')
-                ),
-                CONSTRAINT chk_kb_policy_version_status CHECK (
-                    version_status IN (
-                        'draft',
-                        'reviewing',
-                        'approved',
-                        'active',
-                        'superseded',
-                        'retired'
-                    )
-                ),
-                CONSTRAINT chk_kb_policy_version_parser_status CHECK (
-                    parser_status IN ('pending', 'processing', 'parsed', 'failed')
-                ),
-                CONSTRAINT chk_kb_policy_version_previous_self CHECK (
-                    previous_version_id IS NULL OR previous_version_id <> id
-                ),
-                CONSTRAINT chk_kb_policy_version_hash_not_blank CHECK (
-                    file_hash IS NULL OR btrim(file_hash) <> ''
-                ),
-                CONSTRAINT fk_kb_policy_version_previous_same_policy
-                    FOREIGN KEY (previous_version_id, policy_id)
-                    REFERENCES kb_policy_version(id, policy_id)
-                    ON DELETE RESTRICT
-            )
-            """
-        )
-    )
-    conn.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS kb_policy_section (
-                id BIGSERIAL PRIMARY KEY,
-                version_id BIGINT NOT NULL REFERENCES kb_policy_version(id) ON DELETE CASCADE,
-                parent_section_id BIGINT REFERENCES kb_policy_section(id) ON DELETE CASCADE,
-                section_no TEXT,
-                section_title TEXT,
-                section_level INTEGER NOT NULL DEFAULT 1,
-                section_path TEXT,
-                section_order INTEGER NOT NULL DEFAULT 0,
-                page_start INTEGER,
-                page_end INTEGER,
-                section_text TEXT NOT NULL,
-                review_status TEXT NOT NULL DEFAULT 'pending',
-                review_note TEXT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                CONSTRAINT chk_kb_policy_section_level CHECK (section_level > 0),
-                CONSTRAINT chk_kb_policy_section_page_range CHECK (
-                    page_end IS NULL OR page_start IS NULL OR page_end >= page_start
-                ),
-                CONSTRAINT chk_kb_policy_section_review_status CHECK (
-                    review_status IN ('pending', 'reviewing', 'passed', 'rejected')
-                )
-            )
-            """
-        )
-    )
-    conn.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS kb_policy_chunk (
-                id BIGSERIAL PRIMARY KEY,
-                version_id BIGINT NOT NULL REFERENCES kb_policy_version(id) ON DELETE CASCADE,
-                section_id BIGINT REFERENCES kb_policy_section(id) ON DELETE SET NULL,
-                chunk_index INTEGER NOT NULL,
-                page_no INTEGER,
-                chunk_text TEXT NOT NULL,
-                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                CONSTRAINT uq_kb_policy_chunk UNIQUE (version_id, chunk_index),
-                CONSTRAINT chk_kb_policy_chunk_index_positive CHECK (chunk_index >= 0)
-            )
-            """
-        )
-    )
+
+Base.metadata.create_all(bind=TEST_ENGINE)
+
+
+@pytest.fixture(autouse=True)
+def _reset_tables() -> None:
+    _truncate_tables()
+
+
+@pytest.fixture(autouse=True)
+def _fake_embedding_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_embeddings(monkeypatch)
+
 
 
 def override_get_db_session():
@@ -224,39 +97,64 @@ app.dependency_overrides[get_db_session] = override_get_db_session
 client = TestClient(app)
 
 
+
+def _install_fake_embeddings(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    mode: str = "success",
+) -> None:
+    def fake_init(self, client=None) -> None:
+        return None
+
+    def fake_embed_chunks(self, chunks):
+        if mode == "failure":
+            raise RuntimeError("向量生成失败")
+        if mode == "dimension_mismatch":
+            raise RuntimeError(
+                f"向量维度不匹配：期望 {settings.vector_dimensions}，实际 8。"
+            )
+        embedded = []
+        for chunk in chunks:
+            vector = [float(chunk.chunk_index + 1)] * settings.vector_dimensions
+            embedded.append(chunk.model_copy(update={"embedding": vector}))
+        return embedded
+
+    monkeypatch.setattr(PolicyEmbeddingService, "__init__", fake_init)
+    monkeypatch.setattr(PolicyEmbeddingService, "embed_chunks", fake_embed_chunks)
+
+
+
 def _truncate_tables() -> None:
     with TEST_ENGINE.begin() as conn:
-        conn.execute(
-            text(
-                """
-                UPDATE kb_policy_document
-                SET current_version_id = NULL,
-                    latest_version_id = NULL
-                """
-            )
-        )
-        conn.execute(text("DELETE FROM kb_policy_section"))
-        conn.execute(text("DELETE FROM kb_policy_version"))
-        conn.execute(text("DELETE FROM kb_policy_document"))
+        conn.execute(text("TRUNCATE TABLE kb_policy_chunk, kb_policy_section, kb_policy_version, kb_policy_document RESTART IDENTITY CASCADE"))
 
 
-def _counts() -> tuple[int, int, int]:
+
+def _counts() -> tuple[int, int, int, int]:
     with TestingSessionLocal() as session:
         return (
             session.query(PolicyDocument).count(),
             session.query(PolicyVersion).count(),
             session.query(PolicySection).count(),
+            session.query(PolicyChunk).count(),
         )
 
 
-def test_policy_ingestion_scan_filters_unsupported_and_template(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "资产评估--报告审核制度.docx").write_bytes(b"docx-placeholder")
-    (tmp_path / "保密承诺 - 模板.docx").write_bytes(b"template")
+
+def _stage_status(payload: dict, stage_name: str) -> str | None:
+    for stage in payload["stages"]:
+        if stage["stage"] == stage_name:
+            return stage["status"]
+    return None
+
+
+
+def test_policy_ingestion_scan_filters_unsupported_and_template(tmp_path: Path) -> None:
+    (tmp_path / "资产评估-报告审核制度.docx").write_bytes(b"docx-placeholder")
+    (tmp_path / "保密承诺-模板.docx").write_bytes(b"template")
     (tmp_path / "旧制度.doc").write_bytes(b"legacy")
-    (tmp_path / "制度说明.txt").write_bytes("说明".encode("utf-8"))
-    (tmp_path / "盖章版.pdf").write_bytes(b"pdf-placeholder")
+    (tmp_path / "制度说明.txt").write_text("说明", encoding="utf-8")
+    (tmp_path / "盖章件.pdf").write_bytes(b"pdf-placeholder")
 
     response = client.post(
         "/api/v1/kb/policy-ingestion/scan",
@@ -266,22 +164,22 @@ def test_policy_ingestion_scan_filters_unsupported_and_template(
     assert response.status_code == 200
     payload = response.json()
     by_name = {item["file_name"]: item for item in payload["candidates"]}
-    assert by_name["资产评估--报告审核制度.docx"]["recommended_action"] == "include"
-    assert by_name["保密承诺 - 模板.docx"]["recommended_action"] == "exclude"
+    assert by_name["资产评估-报告审核制度.docx"]["recommended_action"] == "include"
+    assert by_name["保密承诺-模板.docx"]["recommended_action"] == "exclude"
     assert by_name["旧制度.doc"]["recommended_action"] == "exclude"
     assert by_name["制度说明.txt"]["recommended_action"] == "exclude"
-    assert by_name["盖章版.pdf"]["parse_method"] == "skip"
+    assert by_name["盖章件.pdf"]["parse_method"] == "skip"
 
 
-def test_policy_pipeline_preview_docx_does_not_persist(tmp_path: Path) -> None:
-    _truncate_tables()
+
+def test_policy_pipeline_preview_docx_returns_chunk_summary_and_no_persistence(tmp_path: Path) -> None:
     sample = tmp_path / "信息安全及保密制度.docx"
     _create_docx(
         sample,
         [
             "信息安全及保密制度",
             "第一章 总则",
-            "第一条 为了加强信息安全管理。",
+            "第一条 为了加强信息安全管理，建立统一的保密责任机制。",
             "第二条 员工离职后仍应承担保密义务。",
         ],
     )
@@ -299,19 +197,28 @@ def test_policy_pipeline_preview_docx_does_not_persist(tmp_path: Path) -> None:
     assert payload["parsed_text"]["suspected_scanned"] is False
     assert payload["cleaned_text"]["clean_text"]
     assert payload["section_result"]["total_sections"] >= 1
-    assert _counts() == (0, 0, 0)
+    assert payload["chunk_result"]["total_chunks"] >= 1
+    assert payload["chunk_result"]["sample_chunks"]
+    assert payload["chunk_result"].get("chunks") == []
+    assert payload["persistence"]["persisted"] is False
+    assert payload["persistence"]["chunk_count"] == payload["chunk_result"]["total_chunks"]
+    assert _stage_status(payload, "chunk_splitting") == "success"
+    assert _stage_status(payload, "embedding_generation") == "skipped"
+    assert _stage_status(payload, "chunk_persistence") == "skipped"
+    assert _counts() == (0, 0, 0, 0)
 
 
-def test_policy_pipeline_ingest_docx_persists_document_version_and_sections(tmp_path: Path) -> None:
-    _truncate_tables()
+
+def test_policy_pipeline_ingest_docx_persists_chunks_and_embeddings(tmp_path: Path) -> None:
     sample = tmp_path / "信息安全及保密制度.docx"
     _create_docx(
         sample,
         [
             "信息安全及保密制度",
             "第一章 总则",
-            "第一条 为了加强信息安全管理。",
+            "第一条 为了加强信息安全管理，建立统一的保密责任机制。",
             "第二条 员工离职后仍应承担保密义务。",
+            "第三条 涉及商业秘密的数据应按照分级授权进行访问。",
         ],
     )
 
@@ -323,11 +230,16 @@ def test_policy_pipeline_ingest_docx_persists_document_version_and_sections(tmp_
     assert response.status_code == 200
     payload = response.json()
     assert payload["persistence"]["persisted"] is True
+    assert payload["persistence"]["section_count"] >= 1
+    assert payload["persistence"]["chunk_count"] > 0
+    assert _stage_status(payload, "embedding_generation") == "success"
+    assert _stage_status(payload, "chunk_persistence") == "success"
 
     with TestingSessionLocal() as session:
         document = session.query(PolicyDocument).one()
         version = session.query(PolicyVersion).one()
         sections = session.query(PolicySection).order_by(PolicySection.section_order).all()
+        chunks = session.query(PolicyChunk).order_by(PolicyChunk.chunk_index).all()
 
         assert document.status == "draft"
         assert document.current_version_id is None
@@ -337,14 +249,28 @@ def test_policy_pipeline_ingest_docx_persists_document_version_and_sections(tmp_
         assert version.revision_type == "initial"
         assert version.parser_status == "parsed"
         assert len(sections) >= 1
+        assert len(chunks) == payload["persistence"]["chunk_count"]
+        assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
+        assert all(chunk.section_id is not None for chunk in chunks)
+        assert all(len(chunk.embedding) == settings.vector_dimensions for chunk in chunks)
+
+        first_chunk = chunks[0]
+        assert first_chunk.chunk_metadata["section_id"] == first_chunk.section_id
+        assert "section_order" in first_chunk.chunk_metadata
+        assert "section_title" in first_chunk.chunk_metadata
+        assert "section_path" in first_chunk.chunk_metadata
+        assert "chunk_in_section" in first_chunk.chunk_metadata
+        assert "chunk_start_offset" in first_chunk.chunk_metadata
+        assert "chunk_end_offset" in first_chunk.chunk_metadata
 
 
-def test_policy_pipeline_ingest_same_policy_reuses_document(
-    tmp_path: Path,
-) -> None:
-    _truncate_tables()
+
+def test_policy_pipeline_ingest_same_policy_reuses_document_and_separates_versions(tmp_path: Path) -> None:
     sample = tmp_path / "信息安全及保密制度.docx"
-    _create_docx(sample, ["第一章 总则", "第一条 第一版内容。"])
+    _create_docx(
+        sample,
+        ["第一章 总则", "第一条 第一版内容。", "第二条 第一版补充要求。"],
+    )
 
     first = client.post(
         "/api/v1/kb/policy-pipeline/ingest",
@@ -352,7 +278,10 @@ def test_policy_pipeline_ingest_same_policy_reuses_document(
     )
     assert first.status_code == 200
 
-    _create_docx(sample, ["第一章 总则", "第一条 第二版内容。"])
+    _create_docx(
+        sample,
+        ["第一章 总则", "第一条 第二版内容。", "第二条 第二版补充要求。"],
+    )
     second = client.post(
         "/api/v1/kb/policy-pipeline/ingest",
         json={
@@ -366,23 +295,24 @@ def test_policy_pipeline_ingest_same_policy_reuses_document(
     with TestingSessionLocal() as session:
         assert session.query(PolicyDocument).count() == 1
         versions = session.query(PolicyVersion).order_by(PolicyVersion.version_seq).all()
+        chunks = session.query(PolicyChunk).order_by(PolicyChunk.version_id, PolicyChunk.chunk_index).all()
+
         assert len(versions) == 2
         assert versions[1].version_seq == 2
         assert versions[1].previous_version_id == versions[0].id
-        assert versions[1].version_label == "20260621-2"
+        assert versions[1].version_label == "20260621"
+        assert {chunk.version_id for chunk in chunks} == {versions[0].id, versions[1].id}
+        assert sum(1 for chunk in chunks if chunk.version_id == versions[0].id) > 0
+        assert sum(1 for chunk in chunks if chunk.version_id == versions[1].id) > 0
 
 
-def test_policy_pipeline_ingest_pdf_persists_document_version_and_sections(
+
+def test_policy_pipeline_ingest_pdf_persists_document_version_sections_and_chunks(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _truncate_tables()
     sample = tmp_path / "采购管理制度.pdf"
     _create_pdf_placeholder(sample)
-
-    from app.services.policy_parser import PolicyParserService
-
-    original = PolicyParserService._parse_pdf
 
     def fake_parse_pdf(self, source_path: str):
         return _build_pdf_parse_result(
@@ -396,101 +326,87 @@ def test_policy_pipeline_ingest_pdf_persists_document_version_and_sections(
         )
 
     monkeypatch.setattr(PolicyParserService, "_parse_pdf", fake_parse_pdf)
-    try:
-        response = client.post(
-            "/api/v1/kb/policy-pipeline/ingest",
-            json={"source_path": str(sample), "policy_category": "管理制度"},
-        )
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/ingest",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
 
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["persistence"]["persisted"] is True
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["persistence"]["persisted"] is True
+    assert payload["persistence"]["chunk_count"] > 0
 
-        with TestingSessionLocal() as session:
-            document = session.query(PolicyDocument).one()
-            version = session.query(PolicyVersion).one()
-            sections = session.query(PolicySection).all()
+    with TestingSessionLocal() as session:
+        document = session.query(PolicyDocument).one()
+        version = session.query(PolicyVersion).one()
+        sections = session.query(PolicySection).all()
+        chunks = session.query(PolicyChunk).all()
 
-            assert document.status == "draft"
-            assert document.current_version_id is None
-            assert document.latest_version_id == version.id
-            assert version.version_status == "draft"
-            assert version.parse_method == "pdf"
-            assert version.file_ext == ".pdf"
-            assert version.page_count == 2
-            assert len(sections) >= 1
-    finally:
-        monkeypatch.setattr(PolicyParserService, "_parse_pdf", original)
+        assert document.latest_version_id == version.id
+        assert version.parse_method == "pdf"
+        assert version.file_ext == ".pdf"
+        assert version.page_count == 2
+        assert len(sections) >= 1
+        assert len(chunks) >= 1
 
 
-def test_policy_pipeline_preview_scanned_pdf_marks_suspected(tmp_path: Path, monkeypatch) -> None:
-    _truncate_tables()
+
+def test_policy_pipeline_preview_scanned_pdf_marks_suspected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     sample = tmp_path / "扫描制度.pdf"
     _create_pdf_placeholder(sample)
-
-    from app.services.policy_parser import PolicyParserService
-
-    original = PolicyParserService._parse_pdf
 
     def fake_parse_pdf(self, source_path: str):
         return _build_pdf_parse_result(
             source_path,
-            raw_text="图像 扫描",
+            raw_text="图片 扫描",
             suspected_scanned=True,
         )
 
     monkeypatch.setattr(PolicyParserService, "_parse_pdf", fake_parse_pdf)
-    try:
-        response = client.post(
-            "/api/v1/kb/policy-pipeline/preview",
-            json={"source_path": str(sample), "policy_category": "管理制度"},
-        )
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["parsed_text"]["suspected_scanned"] is True
-        assert payload["parsed_text"]["notes"]
-        assert _counts() == (0, 0, 0)
-    finally:
-        monkeypatch.setattr(PolicyParserService, "_parse_pdf", original)
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/preview",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["parsed_text"]["suspected_scanned"] is True
+    assert payload["parsed_text"]["notes"]
+    assert _counts() == (0, 0, 0, 0)
+
 
 
 def test_policy_pipeline_ingest_scanned_pdf_stops_before_persistence(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _truncate_tables()
     sample = tmp_path / "扫描制度.pdf"
     _create_pdf_placeholder(sample)
-
-    from app.services.policy_parser import PolicyParserService
-
-    original = PolicyParserService._parse_pdf
 
     def fake_parse_pdf(self, source_path: str):
         return _build_pdf_parse_result(
             source_path,
-            raw_text="图像 扫描",
+            raw_text="图片 扫描",
             suspected_scanned=True,
         )
 
     monkeypatch.setattr(PolicyParserService, "_parse_pdf", fake_parse_pdf)
-    try:
-        response = client.post(
-            "/api/v1/kb/policy-pipeline/ingest",
-            json={"source_path": str(sample), "policy_category": "管理制度"},
-        )
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["persistence"]["persisted"] is False
-        assert _counts() == (0, 0, 0)
-    finally:
-        monkeypatch.setattr(PolicyParserService, "_parse_pdf", original)
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/ingest",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["persistence"]["persisted"] is False
+    assert _stage_status(payload, "document_persistence") == "failed"
+    assert _counts() == (0, 0, 0, 0)
+
 
 
 def test_policy_pipeline_ingest_without_headings_creates_full_text_section(tmp_path: Path) -> None:
-    _truncate_tables()
     sample = tmp_path / "员工行为规范.docx"
-    _create_docx(sample, ["这是一个没有明确章条标题的制度正文。"])
+    _create_docx(sample, ["这是一份没有明显章节标题的制度正文。"])
 
     response = client.post(
         "/api/v1/kb/policy-pipeline/ingest",
@@ -501,13 +417,13 @@ def test_policy_pipeline_ingest_without_headings_creates_full_text_section(tmp_p
 
     with TestingSessionLocal() as session:
         section = session.query(PolicySection).one()
+        chunk = session.query(PolicyChunk).one()
         assert section.section_title == "全文"
+        assert chunk.chunk_metadata["section_title"] == "全文"
 
 
-def test_policy_pipeline_ingest_excluded_keyword_file_fails_before_persistence(
-    tmp_path: Path,
-) -> None:
-    _truncate_tables()
+
+def test_policy_pipeline_ingest_excluded_keyword_file_fails_before_persistence(tmp_path: Path) -> None:
     sample = tmp_path / "保密制度-模板.docx"
     _create_docx(sample, ["第一章 总则", "第一条 仅供模板参考。"])
 
@@ -519,56 +435,109 @@ def test_policy_pipeline_ingest_excluded_keyword_file_fails_before_persistence(
     assert response.status_code == 200
     payload = response.json()
     assert payload["validation"]["is_allowed"] is False
-    assert _counts() == (0, 0, 0)
+    assert _counts() == (0, 0, 0, 0)
 
 
-def test_policy_pipeline_ingest_rolls_back_when_section_persistence_fails(
+
+def test_policy_pipeline_ingest_rolls_back_when_embedding_generation_fails(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _truncate_tables()
+    _install_fake_embeddings(monkeypatch, mode="failure")
     sample = tmp_path / "事务回滚制度.docx"
-    _create_docx(sample, ["第一章 总则", "第一条 需要测试事务回滚。"])
-
-    from app.repositories.policy_repository import PolicyRepository
-
-    original = PolicyRepository._create_sections
-
-    def broken_create_sections(self, *, version, sections):
-        raise RuntimeError("section persistence failed")
-
-    monkeypatch.setattr(PolicyRepository, "_create_sections", broken_create_sections)
-    try:
-        response = client.post(
-            "/api/v1/kb/policy-pipeline/ingest",
-            json={"source_path": str(sample), "policy_category": "管理制度"},
-        )
-        assert response.status_code == 400
-        assert _counts() == (0, 0, 0)
-    finally:
-        monkeypatch.setattr(PolicyRepository, "_create_sections", original)
-
-
-def test_policy_pipeline_does_not_create_chunk_records(tmp_path: Path) -> None:
-    _truncate_tables()
-    sample = tmp_path / "不生成切块制度.docx"
-    _create_docx(sample, ["第一章 总则", "第一条 本阶段不生成 chunk。"])
+    _create_docx(sample, ["第一章 总则", "第一条 需要测试 embedding 失败后的回滚。"])
 
     response = client.post(
         "/api/v1/kb/policy-pipeline/ingest",
         json={"source_path": str(sample), "policy_category": "管理制度"},
     )
 
-    assert response.status_code == 200
-    with TEST_ENGINE.begin() as conn:
-        chunk_count = conn.execute(text("SELECT COUNT(*) FROM kb_policy_chunk")).scalar_one()
-    assert chunk_count == 0
+    assert response.status_code == 400
+    assert "向量生成失败" in response.json()["detail"]
+    assert _counts() == (0, 0, 0, 0)
 
 
-def test_policy_pipeline_preview_upload_returns_upload_id_and_no_persistence(
+
+def test_policy_pipeline_ingest_rolls_back_when_embedding_dimension_mismatches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_embeddings(monkeypatch, mode="dimension_mismatch")
+    sample = tmp_path / "向量维度校验制度.docx"
+    _create_docx(sample, ["第一章 总则", "第一条 需要测试 embedding 维度不匹配时的回滚。"])
+
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/ingest",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
+
+    assert response.status_code == 400
+    assert "向量维度不匹配" in response.json()["detail"]
+    assert _counts() == (0, 0, 0, 0)
+
+
+
+def test_policy_chunking_service_splits_long_section_into_multiple_chunks() -> None:
+    section_result = SectionSplitResult(
+        total_sections=1,
+        strategy="chapter-article",
+        notes=[],
+        sections=[
+            SectionSplitItem(
+                section_no="第一条",
+                section_title="总则",
+                section_level=1,
+                section_path="第一章 / 总则",
+                section_order=0,
+                section_text=("为测试长文本切块。" * 30),
+            )
+        ],
+    )
+    service = PolicyChunkingService(
+        chunking_policy=PolicyChunkingPolicy(target_chars=40, overlap_chars=10)
+    )
+
+    result = service.split(section_result)
+
+    assert result.total_chunks > 1
+    assert [item.chunk_index for item in result.chunks] == list(range(result.total_chunks))
+    assert all(item.section_order == 0 for item in result.chunks)
+    assert all(item.char_count <= 40 for item in result.chunks)
+
+
+
+def test_policy_chunking_service_keeps_short_section_as_single_chunk() -> None:
+    section_result = SectionSplitResult(
+        total_sections=1,
+        strategy="chapter-article",
+        notes=[],
+        sections=[
+            SectionSplitItem(
+                section_no="第一条",
+                section_title="总则",
+                section_level=1,
+                section_path="第一章 / 总则",
+                section_order=0,
+                section_text="这是一个较短的 section。",
+            )
+        ],
+    )
+    service = PolicyChunkingService(
+        chunking_policy=PolicyChunkingPolicy(target_chars=80, overlap_chars=10)
+    )
+
+    result = service.split(section_result)
+
+    assert result.total_chunks == 1
+    assert result.chunks[0].chunk_in_section == 0
+    assert result.chunks[0].chunk_start_offset == 0
+    assert result.chunks[0].chunk_end_offset == len("这是一个较短的 section。")
+
+
+
+def test_policy_pipeline_preview_upload_returns_upload_id_chunk_summary_and_no_persistence(
     tmp_path: Path,
 ) -> None:
-    _truncate_tables()
     sample = tmp_path / "上传预览制度.docx"
     _create_docx(
         sample,
@@ -596,11 +565,12 @@ def test_policy_pipeline_preview_upload_returns_upload_id_and_no_persistence(
     payload = response.json()
     assert payload["upload_id"]
     assert payload["parsed_text"]["parser_status"] == "parsed"
-    assert _counts() == (0, 0, 0)
+    assert payload["chunk_result"]["total_chunks"] >= 1
+    assert _counts() == (0, 0, 0, 0)
+
 
 
 def test_policy_pipeline_ingest_upload_uses_staged_file(tmp_path: Path) -> None:
-    _truncate_tables()
     sample = tmp_path / "上传入库制度.docx"
     _create_docx(
         sample,
@@ -640,9 +610,12 @@ def test_policy_pipeline_ingest_upload_uses_staged_file(tmp_path: Path) -> None:
     assert ingest_response.status_code == 200
     payload = ingest_response.json()
     assert payload["persistence"]["persisted"] is True
+    assert payload["persistence"]["chunk_count"] > 0
 
     with TestingSessionLocal() as session:
         document = session.query(PolicyDocument).one()
         version = session.query(PolicyVersion).one()
+        chunks = session.query(PolicyChunk).all()
         assert document.policy_name == "上传入库制度"
         assert version.version_label == "20260621"
+        assert len(chunks) > 0

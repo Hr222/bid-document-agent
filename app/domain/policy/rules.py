@@ -5,11 +5,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 CHINESE_NUMERAL_FRAGMENT = r"[一二三四五六七八九十百千万零〇两0-9]+"
-
-# 标题层级类型别名：
-# 1 = 章，2 = 节，3 = 条。
-# 可以把它理解成一个轻量级的类型约束，主要用于提高可读性和类型检查效果。
 HeadingLevel = Literal[1, 2, 3]
+
 
 @dataclass(slots=True)
 class PolicyIntakeDecision:
@@ -23,14 +20,8 @@ class PolicyIntakeDecision:
 
 
 class PolicyIntakePolicy:
-    """
-    第一阶段制度文件 intake 规则。
-
-    当前 MVP 只接收原生 DOCX 和可直接抽文本的 PDF。
-    """
-
+    """文件准入规则。"""
     _allowed_extensions = {".docx", ".pdf"}
-
     _excluded_keywords = {
         "身份证",
         "签字",
@@ -50,24 +41,14 @@ class PolicyIntakePolicy:
         "模板",
     }
 
-    def decide(
-        self,
-        *,
-        file_name: str,
-        extension: str,
-        size_bytes: int,
-    ) -> PolicyIntakeDecision:
-        """判断文件是否允许继续进入解析流水线。"""
-        # 这里 * 的作用是：后面的参数必须用“具名参数”传入。
-        # 也就是调用时要写 decide(file_name=..., extension=..., size_bytes=...)
-        # 这样做比只靠位置传参更清晰，尤其适合规则判断这类方法。
+    def decide(self, *, file_name: str, extension: str, size_bytes: int) -> PolicyIntakeDecision:
         if extension not in self._allowed_extensions:
             return PolicyIntakeDecision(
                 is_allowed=False,
                 detected_file_kind="unsupported",
                 needs_normalization=False,
                 recommended_parse_method="skip",
-                warnings=["Only .docx and native-text .pdf files are allowed in this MVP."],
+                warnings=["当前 MVP 仅允许 .docx 和原生文本 .pdf 文件。"],
             )
 
         if size_bytes <= 0:
@@ -76,7 +57,7 @@ class PolicyIntakePolicy:
                 detected_file_kind="empty",
                 needs_normalization=False,
                 recommended_parse_method="skip",
-                warnings=["The source file is empty."],
+                warnings=["源文件为空。"],
             )
 
         lower_name = file_name.lower()
@@ -87,7 +68,7 @@ class PolicyIntakePolicy:
                     detected_file_kind="excluded_by_keyword",
                     needs_normalization=False,
                     recommended_parse_method="skip",
-                    warnings=[f"File name contains excluded keyword: {keyword}"],
+                    warnings=[f"文件名命中排除关键字：{keyword}"],
                 )
 
         if extension == ".docx":
@@ -109,27 +90,17 @@ class PolicyIntakePolicy:
 
 
 class PolicyIdentityPolicy:
-    """
-    制度主档命名和版本标签推导规则。
-
-    这些都属于业务规则，因此放在领域层，而不是写死在应用服务里。
-    """
-
+    """根据文件名推导制度名称和版本标签。"""
     _bracket_noise_pattern = re.compile(
         r"[（(][^（）()]{0,40}(模板|空白|盖章|签字|签名|扫描)[^（）()]{0,40}[）)]"
     )
 
     def build_version_label(self, *, explicit_label: str | None, modified_at_text: str) -> str:
-        """优先返回显式传入的版本标签，否则根据文件时间推导。"""
-        # str | None 是 Python 3.10+ 的联合类型写法。
-        # 可以把它理解成 Java 里的“这个参数允许为 null”，
-        # 只是 Python 用类型提示直接表达出来。
         if explicit_label:
             return explicit_label
         return modified_at_text
 
     def guess_policy_name(self, *, file_name: str) -> str:
-        """根据源文件名推导第一阶段使用的制度名称。"""
         stem = file_name.rsplit(".", maxsplit=1)[0]
         cleaned = re.sub(r"^\d{6,8}", "", stem)
         cleaned = self._bracket_noise_pattern.sub("", cleaned)
@@ -141,30 +112,18 @@ class PolicyIdentityPolicy:
 
 @dataclass(slots=True)
 class SectionHeading:
-    """表示一次识别到的章/节/条标题的领域值对象。"""
-
     section_no: str
     section_title: str
     section_level: HeadingLevel
 
 
 class PolicySectionStructurePolicy:
-    """
-    制度文档结构识别规则。
-
-    章、节、条这些语义本身就是业务概念，因此放在领域层，而不是藏到通用工具类里。
-    """
-
+    """章节标题识别规则。"""
     _chapter_pattern = re.compile(rf"^(第{CHINESE_NUMERAL_FRAGMENT}章)\s*(.*)$")
     _section_pattern = re.compile(rf"^(第{CHINESE_NUMERAL_FRAGMENT}节)\s*(.*)$")
     _article_pattern = re.compile(rf"^(第{CHINESE_NUMERAL_FRAGMENT}条)\s*(.*)$")
-    # rf"..."
-    # r 表示原始字符串，适合写正则，减少转义干扰。
-    # f 表示格式化字符串，可以把上面的 CHINESE_NUMERAL_FRAGMENT 插进来。
-    # 合在一起就是“支持变量插值的原始正则字符串”。
 
     def match_heading(self, line: str) -> SectionHeading | None:
-        """从一行文本中识别章、节、条标题。"""
         stripped = line.strip()
         for pattern, level in (
             (self._chapter_pattern, 1),
@@ -181,11 +140,70 @@ class PolicySectionStructurePolicy:
         return None
 
     def rebuild_path(self, *, current_path: list[str], heading: SectionHeading) -> list[str]:
-        """按标题层级维护一个简化的章节路径。"""
-        # list[str] 是 Python 类型注解，表示“字符串列表”。
-        # 可以近似类比成 Java 里的 List<String>。
         if heading.section_level <= 1:
             return [heading.section_title]
         if len(current_path) < heading.section_level - 1:
             return current_path + [heading.section_title]
         return current_path[: heading.section_level - 1] + [heading.section_title]
+
+
+@dataclass(slots=True)
+class ChunkSlice:
+    start: int
+    end: int
+    text: str
+    chunk_in_section: int
+
+
+class PolicyChunkingPolicy:
+    """section 优先的切块规则。"""
+
+    def __init__(self, *, target_chars: int, overlap_chars: int) -> None:
+        if target_chars <= 0:
+            raise ValueError("target_chars 必须大于 0。")
+        if overlap_chars < 0:
+            raise ValueError("overlap_chars 不能小于 0。")
+        if overlap_chars >= target_chars:
+            raise ValueError("overlap_chars 必须小于 target_chars。")
+
+        self.target_chars = target_chars
+        self.overlap_chars = overlap_chars
+
+    def split_section_text(self, text: str) -> list[ChunkSlice]:
+        """单个 section 过长时，再按长度切成多个片段。"""
+        normalized = text.strip()
+        if not normalized:
+            return []
+        if len(normalized) <= self.target_chars:
+            return [ChunkSlice(start=0, end=len(normalized), text=normalized, chunk_in_section=0)]
+
+        chunks: list[ChunkSlice] = []
+        start = 0
+        chunk_in_section = 0
+        step = self.target_chars - self.overlap_chars
+        while start < len(normalized):
+            end = min(len(normalized), start + self.target_chars)
+            if end < len(normalized):
+                candidate = normalized[start:end]
+                split_at = max(
+                    candidate.rfind("\n"),
+                    candidate.rfind("。"),
+                    candidate.rfind("；"),
+                )
+                if split_at >= max(0, len(candidate) // 2):
+                    end = start + split_at + 1
+            chunk_text = normalized[start:end].strip()
+            if chunk_text:
+                chunks.append(
+                    ChunkSlice(
+                        start=start,
+                        end=end,
+                        text=chunk_text,
+                        chunk_in_section=chunk_in_section,
+                    )
+                )
+                chunk_in_section += 1
+            if end >= len(normalized):
+                break
+            start = max(end - self.overlap_chars, start + step)
+        return chunks
