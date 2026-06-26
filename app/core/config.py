@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     chunk_target_chars: int = 1200
     chunk_overlap_chars: int = 120
     embedding_batch_size: int = 16
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     model_config = SettingsConfigDict(
         env_file=".env",

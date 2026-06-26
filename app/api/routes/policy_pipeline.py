@@ -1,10 +1,13 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session
 from app.core.config import settings
+from app.core.logging import get_logger
+from app.db.schema_health import KB_SCHEMA_SETUP_GUIDE, is_missing_kb_schema_error
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas.policy_pipeline import PolicyPipelineRequest, PolicyPipelineResponse
 from app.schemas.policy_upload import PolicyUploadIngestRequest, PolicyUploadPreviewResponse
@@ -12,6 +15,7 @@ from app.services.pipeline import PolicyPipelineService
 from app.services.policy_upload_service import PolicyUploadService
 
 router = APIRouter()
+logger = get_logger("app.api.policy_pipeline")
 
 
 def _upload_service() -> PolicyUploadService:
@@ -37,6 +41,11 @@ async def ingest_policy_pipeline(
     service = PolicyPipelineService(repository=PolicyRepository(session))
     try:
         return service.ingest(request)
+    except ProgrammingError as exc:
+        if is_missing_kb_schema_error(exc):
+            logger.exception("Knowledge base schema missing during ingest path=%s", request.source_path)
+            raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
+        raise
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -83,5 +92,13 @@ async def ingest_policy_pipeline_upload(
                 version_label=request.version_label,
             )
         )
+    except ProgrammingError as exc:
+        if is_missing_kb_schema_error(exc):
+            logger.exception(
+                "Knowledge base schema missing during ingest upload upload_id=%s",
+                request.upload_id,
+            )
+            raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
+        raise
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

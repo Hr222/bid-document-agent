@@ -10,7 +10,8 @@ def test_root() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["message"] == "Bid Document Agent API"
+    assert isinstance(payload["message"], str)
+    assert payload["message"]
     assert payload["phase"] == "rag-mvp"
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.core.logging import get_logger
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas.policy_pipeline import (
     ChunkSplitResult,
@@ -11,6 +12,8 @@ from app.schemas.policy_pipeline import (
     SectionSplitResult,
 )
 from app.services.pipeline.context import PipelineContext
+
+logger = get_logger("app.pipeline.persistence")
 
 
 class PolicyPersistenceService:
@@ -32,6 +35,14 @@ class PolicyPersistenceService:
         cleaned_text = self._require_cleaned_text(context.cleaned_text)
         section_result = self._require_section_result(context.section_result)
         chunk_result = self._require_chunk_result(context.chunk_result)
+        logger.info(
+            "Persisting knowledge base records source_path=%s policy_name=%s version_label=%s sections=%s chunks=%s",
+            context.request.source_path,
+            policy_name,
+            version_label,
+            len(section_result.sections),
+            len(chunk_result.chunks),
+        )
 
         persisted = self.repository.save_document_version_sections_and_chunks(
             policy_name=policy_name,
@@ -46,6 +57,15 @@ class PolicyPersistenceService:
             cleaned_text=cleaned_text,
             sections=section_result.sections,
             chunks=chunk_result.chunks,
+        )
+        logger.info(
+            "Knowledge base records persisted source_path=%s document_id=%s version_id=%s version_seq=%s sections=%s chunks=%s",
+            context.request.source_path,
+            persisted.document.id,
+            persisted.version.id,
+            persisted.version.version_seq,
+            len(persisted.sections),
+            len(persisted.chunks),
         )
         return PersistenceResult(
             persisted=True,
