@@ -13,9 +13,13 @@ class PolicyEmbeddingService:
         if client is not None:
             self.client = client
         else:
-            if not settings.openai_api_key:
-                raise RuntimeError("执行向量生成前必须先配置 OPENAI_API_KEY。")
-            self.client = OpenAI(api_key=settings.openai_api_key)
+            if not settings.gitee_api_key:
+                raise RuntimeError("执行向量生成前必须先配置 Gitee AI 的 GITEE_API_KEY。")
+            self.client = OpenAI(
+                api_key=settings.gitee_api_key,
+                base_url=settings.gitee_base_url,
+                default_headers={"X-Failover-Enabled": "true"},
+            )
 
     def embed_chunks(self, chunks: list[ChunkItem]) -> list[ChunkItem]:
         """
@@ -33,6 +37,7 @@ class PolicyEmbeddingService:
             response = self.client.embeddings.create(
                 model=settings.embedding_model,
                 input=[item.chunk_text for item in batch],
+                dimensions=settings.vector_dimensions,
             )
             vectors = [item.embedding for item in response.data]
             if len(vectors) != len(batch):

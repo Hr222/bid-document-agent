@@ -12,9 +12,9 @@ from app.db.base import Base
 from app.main import app
 from app.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
 from app.schemas.policy_pipeline import ParsedTextResult, SectionSplitItem, SectionSplitResult
-from app.services.policy_chunking import PolicyChunkingService
-from app.services.policy_embedding import PolicyEmbeddingService
-from app.services.policy_parser import PolicyParserService
+from app.services.step.policy_chunking import PolicyChunkingService
+from app.services.step.policy_embedding import PolicyEmbeddingService
+from app.services.step.policy_parser import PolicyParserService
 from app.domain.policy import PolicyChunkingPolicy
 
 
@@ -70,6 +70,10 @@ TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit
 with TEST_ENGINE.begin() as conn:
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}"))
+    conn.execute(text("DROP TABLE IF EXISTS kb_policy_chunk CASCADE"))
+    conn.execute(text("DROP TABLE IF EXISTS kb_policy_section CASCADE"))
+    conn.execute(text("DROP TABLE IF EXISTS kb_policy_version CASCADE"))
+    conn.execute(text("DROP TABLE IF EXISTS kb_policy_document CASCADE"))
 
 Base.metadata.create_all(bind=TEST_ENGINE)
 

@@ -1,5 +1,5 @@
 from app.schemas.policy_pipeline import CleanedTextResult
-from app.services.policy_section_splitter import PolicySectionSplitter
+from app.services.step.policy_section_splitter import PolicySectionSplitter
 
 
 def test_policy_section_splitter_splits_chapter_and_article() -> None:
