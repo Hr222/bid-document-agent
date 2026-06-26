@@ -175,6 +175,10 @@ class PolicyVersion(Base):
         back_populates="version",
         cascade="all, delete-orphan",
     )
+    chunks: Mapped[list["PolicyChunk"]] = relationship(
+        back_populates="version",
+        cascade="all, delete-orphan",
+    )
 
 
 class PolicySection(Base):

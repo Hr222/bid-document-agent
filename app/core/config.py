@@ -18,10 +18,10 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
 
-    openai_model: str = "gpt-4.1-mini"
-    embedding_model: str = "text-embedding-3-small"
-    vector_dimensions: int = 1536
-    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    gitee_api_key: str | None = Field(default=None, alias="GITEE_API_KEY")
+    gitee_base_url: str = "https://ai.gitee.com/v1"
+    embedding_model: str = "Qwen3-Embedding-0.6B"
+    vector_dimensions: int = 1024
     chunk_target_chars: int = 1200
     chunk_overlap_chars: int = 120
     embedding_batch_size: int = 16

@@ -246,7 +246,7 @@ pip install -r requirements-dev.txt
 说明：
 
 - `dev` 环境已经包含当前阶段大部分需要的 Python 依赖
-- 包括 FastAPI、数据库、pgvector、文档解析、OpenAI、LangChain、LangGraph、OCR、测试和代码检查
+- 包括 FastAPI、数据库、pgvector、文档解析、Gitee AI、LangChain、LangGraph、OCR、测试和代码检查
 - React 前端依赖后续单独放在前端工程中管理，不混在 Python 的 `pip` 文件中
 
 ## 本地基础设施

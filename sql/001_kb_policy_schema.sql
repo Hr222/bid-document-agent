@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS kb_policy_chunk (
     chunk_index INTEGER NOT NULL,
     page_no INTEGER,
     chunk_text TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(1024),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -216,7 +216,7 @@ COMMENT ON COLUMN kb_policy_chunk.section_id IS '所属章节ID，可为空。';
 COMMENT ON COLUMN kb_policy_chunk.chunk_index IS '切块序号。';
 COMMENT ON COLUMN kb_policy_chunk.page_no IS '页码。';
 COMMENT ON COLUMN kb_policy_chunk.chunk_text IS '切块文本内容。';
-COMMENT ON COLUMN kb_policy_chunk.embedding IS '文本向量，当前维度为 1536。';
+COMMENT ON COLUMN kb_policy_chunk.embedding IS '文本向量，当前维度为 1024。';
 COMMENT ON COLUMN kb_policy_chunk.metadata IS '检索用元数据。';
 COMMENT ON COLUMN kb_policy_chunk.created_at IS '创建时间。';
 COMMENT ON COLUMN kb_policy_chunk.updated_at IS '更新时间。';
