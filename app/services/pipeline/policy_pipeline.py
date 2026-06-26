@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -6,20 +6,13 @@ from app.core.config import settings
 from app.domain.policy import PolicyIdentityPolicy
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas.policy_pipeline import (
-    ChunkSplitResult,
-    CleanedTextResult,
-    FormatNormalizationResult,
-    ParsedTextResult,
-    ParseRoutingResult,
     PersistenceResult,
-    PipelineStageName,
-    PipelineStageResult,
-    PipelineStatus,
     PolicyPipelineRequest,
     PolicyPipelineResponse,
-    RegisteredFileInfo,
-    SectionSplitResult,
 )
+from app.services.pipeline.context import PipelineContext, PipelineMode
+from app.services.pipeline.persistence_service import PolicyPersistenceService
+from app.services.pipeline.response_builder import PipelineResponseBuilder
 from app.services.step.policy_chunking import PolicyChunkingService
 from app.services.step.policy_embedding import PolicyEmbeddingService
 from app.services.step.policy_file_service import PolicyFileService
@@ -35,6 +28,9 @@ class PolicyPipelineService:
     def __init__(self, repository: PolicyRepository | None = None) -> None:
         workspace_root = Path(settings.policy_pipeline_workspace)
         self.repository = repository
+        self.persistence_service = (
+            PolicyPersistenceService(repository) if repository is not None else None
+        )
         self.file_service = PolicyFileService()
         self.normalizer = PolicyFormatNormalizer(workspace_root=workspace_root)
         self.parser = PolicyParserService()
@@ -55,269 +51,228 @@ class PolicyPipelineService:
         self,
         *,
         request: PolicyPipelineRequest,
-        mode: str,
+        mode: PipelineMode,
         persist: bool,
     ) -> PolicyPipelineResponse:
-        response = PolicyPipelineResponse(
-            mode=mode,
-            source_path=request.source_path,
-            stages=[],
-        )
+        context = PipelineContext(request=request, mode=mode, persist=persist)
+        builder = PipelineResponseBuilder(context)
 
-        # 步骤 1-2：文件登记、制度名称推导、准入校验。
-        registered_file = self.file_service.register_file(request.source_path)
-        response.registered_file = registered_file
-        self._append_success_stage(response, "file_registration", "已完成源文件登记。")
-
-        response.policy_name_guess = self.identity_policy.guess_policy_name(
-            file_name=registered_file.file_name,
+        stages = (
+            self._register_file,
+            self._validate_intake,
+            self._normalize,
+            self._route_parser,
+            self._parse_text,
+            self._guard_ingest_eligibility,
+            self._clean_text,
+            self._split_sections,
+            self._split_chunks,
+            self._embed_if_needed,
+            self._persist_if_needed,
         )
-        response.derived_version_label = self.identity_policy.build_version_label(
-            explicit_label=request.version_label,
-            modified_at_text=registered_file.source_modified_at.strftime("%Y%m%d"),
-        )
+        for stage in stages:
+            stage(context, builder)
+            if context.stop_requested:
+                break
+        return builder.build()
 
-        validation = self.file_service.validate_intake(registered_file)
-        response.validation = validation
+    def _register_file(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        registered_file = self.file_service.register_file(context.request.source_path)
+        builder.set_registered_file(registered_file)
+        builder.set_policy_identity(
+            policy_name_guess=self.identity_policy.guess_policy_name(
+                file_name=registered_file.file_name,
+            ),
+            derived_version_label=self.identity_policy.build_version_label(
+                explicit_label=context.request.version_label,
+                modified_at_text=registered_file.source_modified_at.strftime("%Y%m%d"),
+            ),
+        )
+        builder.success("file_registration", "已完成源文件登记。")
+
+    def _validate_intake(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.registered_file is None:
+            raise RuntimeError("执行准入校验前缺少文件登记结果。")
+
+        validation = self.file_service.validate_intake(context.registered_file)
+        builder.set_validation(validation)
         if not validation.is_allowed:
-            self._append_failure_stage(
-                response,
+            builder.failed(
                 "intake_validation",
-                self._join_messages(validation.warnings, "文件未通过准入校验。"),
+                builder.join_messages(validation.warnings, "文件未通过准入校验。"),
+                stop=True,
             )
-            return response
-        self._append_success_stage(response, "intake_validation", "文件通过准入校验。")
+            return
+        builder.success("intake_validation", "文件通过准入校验。")
 
-        # 步骤 3-5：格式归一化、解析路由、文本解析。
-        normalization = self.normalizer.normalize(registered_file)
-        response.normalization = normalization
+    def _normalize(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.registered_file is None:
+            raise RuntimeError("执行格式归一化前缺少文件登记结果。")
+
+        normalization = self.normalizer.normalize(context.registered_file)
+        builder.set_normalization(normalization)
         if normalization.status == "failed":
-            self._append_failure_stage(
-                response,
-                "format_normalization",
-                normalization.message,
-            )
-            return response
-        self._append_stage(
-            response,
-            "format_normalization",
-            normalization.status,
-            normalization.message,
-        )
+            builder.failed("format_normalization", normalization.message, stop=True)
+            return
+        if normalization.status == "skipped":
+            builder.skipped("format_normalization", normalization.message)
+            return
+        builder.success("format_normalization", normalization.message)
 
-        parse_routing = self.parser.route_parser(normalization.normalized_path)
-        response.parse_routing = parse_routing
-        self._append_success_stage(
-            response,
-            "parse_routing",
-            f"已选择解析器：{parse_routing.parser_name}。",
-        )
+    def _route_parser(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.normalization is None:
+            raise RuntimeError("执行解析路由前缺少格式归一化结果。")
+
+        parse_routing = self.parser.route_parser(context.normalization.normalized_path)
+        builder.set_parse_routing(parse_routing)
+        builder.success("parse_routing", f"已选择解析器：{parse_routing.parser_name}。")
+
+    def _parse_text(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.normalization is None:
+            raise RuntimeError("执行文本解析前缺少格式归一化结果。")
+        if context.parse_routing is None:
+            raise RuntimeError("执行文本解析前缺少解析路由结果。")
 
         parsed_text = self.parser.parse(
-            source_path=normalization.normalized_path,
-            parse_method=parse_routing.parse_method,
+            source_path=context.normalization.normalized_path,
+            parse_method=context.parse_routing.parse_method,
         )
-        response.parsed_text = parsed_text
+        builder.set_parsed_text(parsed_text)
         if parsed_text.parser_status == "failed":
-            self._append_failure_stage(
-                response,
+            builder.failed(
                 "text_parsing",
-                self._join_messages(parsed_text.notes, "文本解析失败。"),
+                builder.join_messages(parsed_text.notes, "文本解析失败。"),
+                stop=True,
             )
-            return response
-        self._append_success_stage(
-            response,
-            "text_parsing",
-            self._build_parsing_message(parsed_text),
-        )
+            return
+        builder.success("text_parsing", builder.parsing_message(parsed_text))
 
-        if parsed_text.suspected_scanned and persist:
-            message = "疑似扫描版 PDF，当前版本暂不支持直接正式入库。"
-            response.persistence = PersistenceResult(
+    def _guard_ingest_eligibility(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if not context.persist or context.parsed_text is None:
+            return
+        if not context.parsed_text.suspected_scanned:
+            return
+
+        message = "疑似扫描版 PDF，当前版本暂不支持直接正式入库。"
+        builder.set_persistence(
+            PersistenceResult(
                 persisted=False,
                 message=message,
             )
-            self._append_failure_stage(response, "document_persistence", message)
-            return response
+        )
+        builder.failed("document_persistence", message, stop=True)
 
-        # 步骤 6-8：文本清洗、章节拆分、切块摘要。
-        cleaned_text = self.cleaner.clean(parsed_text)
-        response.cleaned_text = cleaned_text
-        self._append_success_stage(response, "text_cleaning", "已完成文本清洗。")
+    def _clean_text(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.parsed_text is None:
+            raise RuntimeError("执行文本清洗前缺少文本解析结果。")
 
-        section_result = self.section_splitter.split(cleaned_text)
-        response.section_result = section_result
-        self._append_success_stage(
-            response,
+        cleaned_text = self.cleaner.clean(context.parsed_text)
+        builder.set_cleaned_text(cleaned_text)
+        builder.success("text_cleaning", "已完成文本清洗。")
+
+    def _split_sections(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.cleaned_text is None:
+            raise RuntimeError("执行章节拆分前缺少文本清洗结果。")
+
+        section_result = self.section_splitter.split(context.cleaned_text)
+        builder.set_section_result(section_result)
+        builder.success(
             "section_splitting",
             f"已拆分出 {section_result.total_sections} 个章节。",
         )
 
-        chunk_result = self.chunking_service.split(section_result)
-        response.chunk_result = chunk_result.model_copy(update={"chunks": []})
-        self._append_success_stage(
-            response,
-            "chunk_splitting",
-            f"已生成 {chunk_result.total_chunks} 个切块。",
-        )
+    def _split_chunks(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.section_result is None:
+            raise RuntimeError("执行切块前缺少章节拆分结果。")
 
-        if not persist:
-            self._append_stage(
-                response,
-                "embedding_generation",
-                "skipped",
-                "预览模式不生成向量。",
-            )
-            response.persistence = PersistenceResult(
-                persisted=False,
-                chunk_count=chunk_result.total_chunks,
-                message="预览模式不写入数据库。",
-            )
-            self._append_stage(
-                response,
-                "chunk_persistence",
-                "skipped",
-                "预览模式不写入切块。",
-            )
-            self._record_persistence_stage(response=response, persist=False)
-            return response
+        chunk_result = self.chunking_service.split(context.section_result)
+        builder.set_chunk_result(chunk_result)
+        builder.success("chunk_splitting", f"已生成 {chunk_result.total_chunks} 个切块。")
 
-        # 步骤 9-11：向量生成、切块入库、文档入库收尾。
+    def _embed_if_needed(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.chunk_result is None:
+            raise RuntimeError("执行向量生成前缺少切块结果。")
+
+        if not context.persist:
+            builder.skipped("embedding_generation", "预览模式不生成向量。")
+            return
+
         embedding_service = PolicyEmbeddingService()
-        embedded_chunks = embedding_service.embed_chunks(chunk_result.chunks)
-        self._append_success_stage(
-            response,
+        embedded_chunks = embedding_service.embed_chunks(context.chunk_result.chunks)
+        embedded_chunk_result = context.chunk_result.model_copy(update={"chunks": embedded_chunks})
+        builder.set_chunk_result(embedded_chunk_result)
+        builder.success(
             "embedding_generation",
             f"已为 {len(embedded_chunks)} 个切块生成向量。",
         )
 
-        embedded_chunk_result = chunk_result.model_copy(update={"chunks": embedded_chunks})
-        response.persistence = self._persist(
-            request=request,
-            response=response,
-            registered_file=registered_file,
-            parse_routing=parse_routing,
-            parsed_text=parsed_text,
-            cleaned_text=cleaned_text,
-            section_result=section_result,
-            chunk_result=embedded_chunk_result,
-        )
-        self._append_success_stage(
-            response,
-            "chunk_persistence",
-            f"已写入 {response.persistence.chunk_count} 个切块及其向量。",
-        )
-        self._record_persistence_stage(response=response, persist=True)
-        return response
-
-    def _build_parsing_message(self, parsed_text: ParsedTextResult) -> str:
-        if not parsed_text.suspected_scanned:
-            return "已完成原始文本提取。"
-        return self._join_messages(
-            parsed_text.notes,
-            "疑似扫描版 PDF，预览会保留提示，入库会在落库前停止。",
-        )
-
-    def _persist(
+    def _persist_if_needed(
         self,
-        *,
-        request: PolicyPipelineRequest,
-        response: PolicyPipelineResponse,
-        registered_file: RegisteredFileInfo,
-        parse_routing: ParseRoutingResult,
-        parsed_text: ParsedTextResult,
-        cleaned_text: CleanedTextResult,
-        section_result: SectionSplitResult,
-        chunk_result: ChunkSplitResult,
-    ) -> PersistenceResult:
-        if self.repository is None:
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.chunk_result is None:
+            raise RuntimeError("执行落库前缺少切块结果。")
+
+        if not context.persist:
+            builder.set_persistence(
+                PersistenceResult(
+                    persisted=False,
+                    chunk_count=context.chunk_result.total_chunks,
+                    message="预览模式不写入数据库。",
+                )
+            )
+            builder.skipped("chunk_persistence", "预览模式不写入切块。")
+            builder.record_persistence_stage()
+            return
+
+        if self.persistence_service is None:
             raise RuntimeError("入库模式未配置仓储实例。")
 
-        policy_name = response.policy_name_guess
-        if not policy_name:
-            raise RuntimeError("落库前缺少制度名称。")
-
-        version_label = response.derived_version_label
-        if not version_label:
-            raise RuntimeError("落库前缺少版本标签。")
-
-        persisted = self.repository.save_document_version_sections_and_chunks(
-            policy_name=policy_name,
-            policy_category=request.policy_category,
-            responsible_department=request.responsible_department,
-            registered_file=registered_file,
-            version_label=version_label,
-            parse_method=parse_routing.parse_method,
-            parser_status=parsed_text.parser_status,
-            is_scanned=parsed_text.suspected_scanned,
-            raw_text=parsed_text.raw_text,
-            cleaned_text=cleaned_text,
-            sections=section_result.sections,
-            chunks=chunk_result.chunks,
+        persistence = self.persistence_service.persist(context)
+        builder.set_persistence(persistence)
+        builder.success(
+            "chunk_persistence",
+            f"已写入 {persistence.chunk_count} 个切块及其向量。",
         )
-        return PersistenceResult(
-            persisted=True,
-            document_id=persisted.document.id,
-            version_id=persisted.version.id,
-            version_seq=persisted.version.version_seq,
-            version_label=persisted.version.version_label,
-            section_count=len(persisted.sections),
-            chunk_count=len(persisted.chunks),
-            message="已完成制度文档、版本、章节、切块和向量入库。",
-        )
-
-    def _record_persistence_stage(
-        self,
-        *,
-        response: PolicyPipelineResponse,
-        persist: bool,
-    ) -> None:
-        if response.persistence is None:
-            raise RuntimeError("流水线结束时缺少落库结果。")
-
-        status: PipelineStatus = (
-            "success" if response.persistence.persisted or not persist else "failed"
-        )
-        self._append_stage(
-            response,
-            "document_persistence",
-            status,
-            response.persistence.message,
-        )
-
-    def _join_messages(self, messages: list[str], fallback: str) -> str:
-        normalized = [message.strip() for message in messages if message.strip()]
-        if not normalized:
-            return fallback
-        return "；".join(normalized)
-
-    def _append_success_stage(
-        self,
-        response: PolicyPipelineResponse,
-        stage: PipelineStageName,
-        message: str,
-    ) -> None:
-        self._append_stage(response, stage, "success", message)
-
-    def _append_failure_stage(
-        self,
-        response: PolicyPipelineResponse,
-        stage: PipelineStageName,
-        message: str,
-    ) -> None:
-        self._append_stage(response, stage, "failed", message)
-
-    def _append_stage(
-        self,
-        response: PolicyPipelineResponse,
-        stage: PipelineStageName,
-        status: PipelineStatus,
-        message: str,
-    ) -> None:
-        response.stages.append(
-            PipelineStageResult(
-                stage=stage,
-                status=status,
-                message=message,
-            )
-        )
+        builder.record_persistence_stage()

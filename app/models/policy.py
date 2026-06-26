@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import BIGINT, BOOLEAN, DATE, INTEGER, TIMESTAMP, ForeignKey, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import settings
 from app.db.base import Base
 
 
@@ -241,3 +244,49 @@ class PolicySection(Base):
     )
 
     version: Mapped["PolicyVersion"] = relationship(back_populates="sections")
+    chunks: Mapped[list["PolicyChunk"]] = relationship(back_populates="section")
+
+
+class PolicyChunk(Base):
+    """Retrieval-oriented chunk with embedding and metadata."""
+
+    __tablename__ = "kb_policy_chunk"
+
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True, autoincrement=True)
+    version_id: Mapped[int] = mapped_column(
+        BIGINT,
+        ForeignKey("kb_policy_version.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    section_id: Mapped[int | None] = mapped_column(
+        BIGINT,
+        ForeignKey("kb_policy_section.id", ondelete="SET NULL"),
+    )
+    chunk_index: Mapped[int] = mapped_column(INTEGER, nullable=False)
+    page_no: Mapped[int | None] = mapped_column(INTEGER)
+    chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(settings.vector_dimensions),
+        nullable=False,
+    )
+    chunk_metadata: Mapped[dict] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    version: Mapped["PolicyVersion"] = relationship(back_populates="chunks")
+    section: Mapped["PolicySection | None"] = relationship(back_populates="chunks")

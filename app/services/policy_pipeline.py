@@ -1,5 +1,0 @@
-"""兼容旧导入路径，真实编排实现位于 app.services.pipeline。"""
-
-from app.services.pipeline.policy_pipeline import PolicyPipelineService
-
-__all__ = ["PolicyPipelineService"]
