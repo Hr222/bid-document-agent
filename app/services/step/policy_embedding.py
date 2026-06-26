@@ -1,9 +1,14 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+from math import ceil
 
 from openai import OpenAI
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.schemas.policy_pipeline import ChunkItem
+
+logger = get_logger("app.embedding.policy")
 
 
 class PolicyEmbeddingService:
@@ -28,12 +33,23 @@ class PolicyEmbeddingService:
         这个步骤只负责生成向量，不负责落库；落库仍由 pipeline 编排后续步骤统一处理。
         """
         if not chunks:
+            logger.info("Embedding generation skipped because there are no chunks to embed.")
             return []
 
         embedded: list[ChunkItem] = []
         batch_size = max(1, settings.embedding_batch_size)
+        total_batches = ceil(len(chunks) / batch_size)
+        logger.info(
+            "Embedding generation started total_chunks=%s batch_size=%s total_batches=%s model=%s dimensions=%s",
+            len(chunks),
+            batch_size,
+            total_batches,
+            settings.embedding_model,
+            settings.vector_dimensions,
+        )
         for start in range(0, len(chunks), batch_size):
             batch = chunks[start : start + batch_size]
+            batch_index = start // batch_size + 1
             response = self.client.embeddings.create(
                 model=settings.embedding_model,
                 input=[item.chunk_text for item in batch],
@@ -49,4 +65,12 @@ class PolicyEmbeddingService:
                         f"向量维度不匹配：期望 {settings.vector_dimensions}，实际 {len(vector)}。"
                     )
                 embedded.append(chunk.model_copy(update={"embedding": vector}))
+            logger.info(
+                "Embedding batch finished batch_index=%s total_batches=%s batch_chunks=%s embedded_total=%s",
+                batch_index,
+                total_batches,
+                len(batch),
+                len(embedded),
+            )
+        logger.info("Embedding generation finished embedded_chunks=%s", len(embedded))
         return embedded
