@@ -29,6 +29,7 @@ export type PipelineResponse = {
   derived_version_label: string | null;
   parsed_text?: {
     parser_status: string;
+    parse_method: "direct" | "ocr" | "mixed";
     suspected_scanned: boolean;
     notes: string[];
     title_candidates: string[];

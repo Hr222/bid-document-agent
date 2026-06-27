@@ -10,7 +10,7 @@ HeadingLevel = Literal[1, 2, 3]
 
 @dataclass(slots=True)
 class PolicyIntakeDecision:
-    """领域层准入决策对象。"""
+    """领域层的准入决策对象。"""
 
     is_allowed: bool
     detected_file_kind: str
@@ -20,7 +20,7 @@ class PolicyIntakeDecision:
 
 
 class PolicyIntakePolicy:
-    """文件准入规则。"""
+    """制度文档准入规则。"""
 
     _allowed_extensions = {".docx", ".pdf"}
     _excluded_keywords = {
@@ -49,7 +49,7 @@ class PolicyIntakePolicy:
                 detected_file_kind="unsupported",
                 needs_normalization=False,
                 recommended_parse_method="skip",
-                warnings=["当前 MVP 仅允许 .docx 和原生文本 .pdf 文件。"],
+                warnings=["当前 MVP 仅允许 .docx 和原生文本型 .pdf 文件。"],
             )
 
         if size_bytes <= 0:
@@ -69,7 +69,7 @@ class PolicyIntakePolicy:
                     detected_file_kind="excluded_by_keyword",
                     needs_normalization=False,
                     recommended_parse_method="skip",
-                    warnings=[f"文件名命中排除关键字：{keyword}"],
+                    warnings=[f"文件名命中排除关键词：{keyword}"],
                 )
 
         if extension == ".docx":
@@ -94,7 +94,7 @@ class PolicyIdentityPolicy:
     """根据文件名推导制度名称和版本标签。"""
 
     _bracket_noise_pattern = re.compile(
-        r"[\（(][^\（\）()]{0,40}(模板|空白|盖章|签字|签名|扫描)[^\（\）()]{0,40}[\）)]"
+        r"[（(][^）)]{0,40}(模板|空白|盖章|签字|签名|扫描)[^）)]{0,40}[）)]"
     )
 
     def build_version_label(self, *, explicit_label: str | None, modified_at_text: str) -> str:
@@ -194,7 +194,7 @@ class ChunkSlice:
 
 
 class PolicyChunkingPolicy:
-    """section 优先的切块规则。"""
+    """先保留 section 边界，再按长度切块的规则。"""
 
     def __init__(self, *, target_chars: int, overlap_chars: int) -> None:
         if target_chars <= 0:
@@ -226,7 +226,7 @@ class PolicyChunkingPolicy:
                 split_at = max(
                     candidate.rfind("\n"),
                     candidate.rfind("。"),
-                    candidate.rfind("；"),
+                    candidate.rfind("，"),
                 )
                 if split_at >= max(0, len(candidate) // 2):
                     end = start + split_at + 1

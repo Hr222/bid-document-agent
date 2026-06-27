@@ -4,16 +4,20 @@ from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+# 启动阶段要覆盖到当前入库链路真正依赖的全部核心表，
+# 避免应用启动正常、首次入库才因为缺表而失败。
 REQUIRED_KB_TABLES = (
     "kb_policy_document",
     "kb_policy_version",
+    "kb_policy_block",
     "kb_policy_section",
     "kb_policy_chunk",
 )
 
 KB_SCHEMA_SETUP_GUIDE = (
-    "知识库数据表未初始化。请先执行 sql/001_kb_policy_schema.sql，"
-    "如需确认 embedding 维度，再执行 sql/002_kb_policy_chunk_embedding_dimension_1024.sql。"
+    "知识库数据表尚未初始化。请先执行 sql/001_kb_policy_schema.sql，"
+    "如需确认 embedding 维度，再执行 sql/002_kb_policy_chunk_embedding_dimension_1024.sql，"
+    "如已接入 block/OCR 流程，还需要执行 sql/003_kb_policy_block.sql。"
 )
 
 

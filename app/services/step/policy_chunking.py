@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from app.core.config import settings
 from app.domain.policy import PolicyChunkingPolicy
-from app.schemas.policy_pipeline import (
+from app.schemas import (
     ChunkItem,
     ChunkSampleItem,
     ChunkSplitResult,
@@ -11,7 +11,7 @@ from app.schemas.policy_pipeline import (
 
 
 class PolicyChunkingService:
-    """负责流水线步骤 8：按章节继续切成可检索的 chunk。"""
+    """负责流水线步骤 11：按章节继续切成可检索的 chunk。"""
 
     def __init__(self, chunking_policy: PolicyChunkingPolicy | None = None) -> None:
         self.chunking_policy = chunking_policy or PolicyChunkingPolicy(
@@ -26,10 +26,9 @@ class PolicyChunkingService:
         include_chunks: bool = True,
     ) -> ChunkSplitResult:
         """
-        步骤 8：先保留 section 边界，再在 section 内做字符窗口切块。
+        步骤 11：先保留 section 边界，再在 section 内做字符窗口切块。
 
         这里既生成完整 chunk，也顺手生成预览要用的 sample_chunks。
-        预览模式只回传摘要样例，不直接把完整 chunk 明细暴露到响应里。
         """
         chunks: list[ChunkItem] = []
         for section in section_result.sections:
@@ -44,6 +43,8 @@ class PolicyChunkingService:
                     "chunk_in_section": slice_item.chunk_in_section,
                     "chunk_start_offset": slice_item.start,
                     "chunk_end_offset": slice_item.end,
+                    "source_block_start": section.source_block_start,
+                    "source_block_end": section.source_block_end,
                 }
                 chunks.append(
                     ChunkItem(
@@ -57,6 +58,8 @@ class PolicyChunkingService:
                         chunk_end_offset=slice_item.end,
                         char_count=len(slice_item.text),
                         page_no=section.page_start,
+                        source_block_start=section.source_block_start,
+                        source_block_end=section.source_block_end,
                         metadata=metadata,
                     )
                 )

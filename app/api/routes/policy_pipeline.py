@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.schema_health import KB_SCHEMA_SETUP_GUIDE, is_missing_kb_schema_error
 from app.repositories.policy_repository import PolicyRepository
-from app.schemas.policy_pipeline import PolicyPipelineRequest, PolicyPipelineResponse
+from app.schemas import PolicyPipelineRequest, PolicyPipelineResponse
 from app.schemas.policy_upload import PolicyUploadIngestRequest, PolicyUploadPreviewResponse
 from app.services.pipeline import PolicyPipelineService
 from app.services.policy_upload_service import PolicyUploadService

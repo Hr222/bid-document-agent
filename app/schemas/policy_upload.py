@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.schemas.policy_pipeline import PolicyPipelineResponse
+from app.schemas import PolicyPipelineResponse
 
 
 class PolicyUploadIngestRequest(BaseModel):

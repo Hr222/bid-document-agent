@@ -25,6 +25,19 @@ class Settings(BaseSettings):
     chunk_target_chars: int = 1200
     chunk_overlap_chars: int = 120
     embedding_batch_size: int = 16
+    zhipu_api_key: str | None = Field(default=None, alias="ZHIPU_API_KEY")
+    zhipu_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
+    zhipu_chat_model: str | None = "glm-4-flash"
+    ocr_model: str = "glm-4.6v-flash"
+    ocr_max_pages_per_batch: int = 4
+    ocr_image_max_side: int = 1800
+    ocr_timeout_seconds: int = 60
+    ocr_request_interval_seconds: float = 10.0
+    retrieval_top_k_default: int = 5
+    retrieval_top_k_max: int = 20
+    rag_answer_top_k: int = 6
+    rag_max_context_chars_per_chunk: int = 500
+    ocr_enabled: bool = True
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     model_config = SettingsConfigDict(

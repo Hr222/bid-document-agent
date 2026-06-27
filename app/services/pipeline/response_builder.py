@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from app.schemas.policy_pipeline import (
+from app.schemas import (
     ChunkSplitResult,
     CleanedTextResult,
     FormatNormalizationResult,
     IntakeValidationResult,
+    OcrProcessResult,
+    ParsedDocumentResult,
     ParsedTextResult,
     ParseRoutingResult,
     PersistenceResult,
@@ -48,6 +50,12 @@ class PipelineResponseBuilder:
     def set_parse_routing(self, parse_routing: ParseRoutingResult) -> None:
         self.context.parse_routing = parse_routing
         self.context.response.parse_routing = parse_routing
+
+    def set_parsed_document(self, parsed_document: ParsedDocumentResult) -> None:
+        self.context.parsed_document = parsed_document
+
+    def set_ocr_result(self, ocr_result: OcrProcessResult) -> None:
+        self.context.ocr_result = ocr_result
 
     def set_parsed_text(self, parsed_text: ParsedTextResult) -> None:
         self.context.parsed_text = parsed_text
@@ -118,11 +126,15 @@ class PipelineResponseBuilder:
         )
 
     def parsing_message(self, parsed_text: ParsedTextResult) -> str:
-        if not parsed_text.suspected_scanned:
-            return "已完成原始文本提取。"
+        if not parsed_text.suspected_scanned and parsed_text.parse_method == "direct":
+            return "已完成全文组装。"
+        if parsed_text.parse_method == "mixed":
+            return self.join_messages(parsed_text.notes, "已完成直接解析与 OCR 混合组装。")
+        if parsed_text.parse_method == "ocr":
+            return self.join_messages(parsed_text.notes, "已完成 OCR 文本组装。")
         return self.join_messages(
             parsed_text.notes,
-            "疑似扫描版 PDF，预览会保留提示，入库会在落库前停止。",
+            "已完成全文组装，但文档仍疑似扫描件。",
         )
 
     def join_messages(self, messages: list[str], fallback: str) -> str:

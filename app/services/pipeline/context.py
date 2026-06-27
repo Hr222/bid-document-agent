@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from app.schemas.policy_pipeline import (
+from app.schemas import (
     ChunkSplitResult,
     CleanedTextResult,
     FormatNormalizationResult,
     IntakeValidationResult,
+    OcrProcessResult,
+    ParsedDocumentResult,
     ParsedTextResult,
     ParseRoutingResult,
     PersistenceResult,
@@ -32,6 +34,8 @@ class PipelineContext:
     validation: IntakeValidationResult | None = None
     normalization: FormatNormalizationResult | None = None
     parse_routing: ParseRoutingResult | None = None
+    parsed_document: ParsedDocumentResult | None = None
+    ocr_result: OcrProcessResult | None = None
     parsed_text: ParsedTextResult | None = None
     cleaned_text: CleanedTextResult | None = None
     section_result: SectionSplitResult | None = None

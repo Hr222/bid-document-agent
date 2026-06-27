@@ -5,11 +5,11 @@ from hashlib import sha256
 from pathlib import Path
 
 from app.domain.policy import PolicyIntakePolicy
-from app.schemas.policy_pipeline import IntakeValidationResult, RegisteredFileInfo
+from app.schemas import IntakeValidationResult, RegisteredFileInfo
 
 
 class PolicyFileService:
-    """处理源文件登记，并把 intake 规则委托给领域层。"""
+    """处理源文件登记，并把准入规则委托给领域层。"""
 
     def __init__(self, intake_policy: PolicyIntakePolicy | None = None) -> None:
         self.intake_policy = intake_policy or PolicyIntakePolicy()
@@ -38,9 +38,9 @@ class PolicyFileService:
 
     def validate_intake(self, registered_file: RegisteredFileInfo) -> IntakeValidationResult:
         """
-        步骤 2：在正式解析前执行轻量级 intake 准入校验。
+        步骤 2：在正式解析前执行轻量级准入校验。
 
-        业务准入规则属于领域层，这里只负责把领域决策转换成 API 可返回的 DTO。
+        业务准入规则属于领域层，这里只负责把领域决策转换成 API DTO。
         """
         decision = self.intake_policy.decide(
             file_name=registered_file.file_name,

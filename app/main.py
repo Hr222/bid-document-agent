@@ -89,7 +89,7 @@ def create_app() -> FastAPI:
     @application.get("/", tags=["system"])
     async def root() -> dict[str, str]:
         return {
-            "message": "鎶曟爣鏂囨。鍔╂墜鎺ュ彛",
+            "message": "投标文档助手接口",
             "phase": "rag-mvp",
             "frontend": "/frontend",
         }
