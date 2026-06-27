@@ -152,6 +152,13 @@ def _stage_status(payload: dict, stage_name: str) -> str | None:
     return None
 
 
+def _stage_message(payload: dict, stage_name: str) -> str | None:
+    for stage in payload["stages"]:
+        if stage["stage"] == stage_name:
+            return stage["message"]
+    return None
+
+
 
 def test_policy_ingestion_scan_filters_unsupported_and_template(tmp_path: Path) -> None:
     (tmp_path / "资产评估-报告审核制度.docx").write_bytes(b"docx-placeholder")
@@ -207,6 +214,9 @@ def test_policy_pipeline_preview_docx_returns_chunk_summary_and_no_persistence(t
     assert payload["persistence"]["persisted"] is False
     assert payload["persistence"]["chunk_count"] == payload["chunk_result"]["total_chunks"]
     assert _stage_status(payload, "chunk_splitting") == "success"
+    assert _stage_message(payload, "parse_routing") == "已选择解析器：DocxParser。"
+    assert _stage_message(payload, "text_parsing") == "已完成原始文本提取。"
+    assert _stage_message(payload, "text_cleaning") == "已完成文本清洗。"
     assert _stage_status(payload, "embedding_generation") == "skipped"
     assert _stage_status(payload, "chunk_persistence") == "skipped"
     assert _counts() == (0, 0, 0, 0)
@@ -424,6 +434,44 @@ def test_policy_pipeline_ingest_without_headings_creates_full_text_section(tmp_p
         chunk = session.query(PolicyChunk).one()
         assert section.section_title == "全文"
         assert chunk.chunk_metadata["section_title"] == "全文"
+
+
+def test_policy_pipeline_ingest_article_heading_uses_short_title_and_skips_cover_noise(
+    tmp_path: Path,
+) -> None:
+    sample = tmp_path / "质量管理制度.docx"
+    _create_docx(
+        sample,
+        [
+            "估",
+            "价",
+            "质",
+            "量",
+            "质量控制和管理制度",
+            "第一章 总则",
+            "第一条 为了加强资产评估业务管理，保证资产评估工作质量，规避资产评估风险。",
+            "第二条 本制度适用于全体员工。",
+        ],
+    )
+
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/ingest",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
+
+    assert response.status_code == 200
+
+    with TestingSessionLocal() as session:
+        sections = session.query(PolicySection).order_by(PolicySection.section_order).all()
+        chunks = session.query(PolicyChunk).order_by(PolicyChunk.chunk_index).all()
+
+        assert sections[0].section_no == "第一章"
+        assert sections[0].section_title == "总则"
+        assert sections[1].section_no == "第一条"
+        assert sections[1].section_title == "第一条"
+        assert "估\n价\n质\n量" not in sections[0].section_text
+        assert chunks[0].chunk_metadata["section_title"] == "总则"
+        assert chunks[1].chunk_metadata["section_title"] == "第一条"
 
 
 

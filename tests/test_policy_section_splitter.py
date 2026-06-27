@@ -19,7 +19,33 @@ def test_policy_section_splitter_splits_chapter_and_article() -> None:
     result = PolicySectionSplitter().split(cleaner_output)
 
     assert result.total_sections >= 3
-    assert result.sections[0].section_title in {"总则", "第一章"}
+    assert result.sections[0].section_title == "总则"
+    assert result.sections[1].section_title == "第一条"
+    assert result.sections[2].section_title == "第二条"
+
+
+def test_policy_section_splitter_discards_cover_noise_before_first_heading() -> None:
+    cleaner_output = CleanedTextResult(
+        clean_text=(
+            "估\n"
+            "价\n"
+            "质\n"
+            "量\n"
+            "质量控制和管理制度\n"
+            "第一章 总则\n"
+            "第一条 为了加强管理。"
+        ),
+        page_count=1,
+        removed_noise_examples=[],
+        notes=[],
+    )
+
+    result = PolicySectionSplitter().split(cleaner_output)
+
+    assert result.total_sections == 2
+    assert result.sections[0].section_no == "第一章"
+    assert result.sections[0].section_title == "总则"
+    assert all("估\n价\n质\n量" not in section.section_text for section in result.sections)
 
 
 def test_policy_section_splitter_falls_back_to_full_text() -> None:

@@ -14,8 +14,6 @@ class PolicySectionSplitter:
         """
         步骤 7：为制度类文档构建结构化章节。
 
-        为制度类文档构建结构化章节。
-
         当前策略是“先结构、后长度”。
         这个阶段只关心业务上有意义的章/节/条单元，不关心 embedding chunk 大小。
         """
@@ -59,6 +57,9 @@ class PolicySectionSplitter:
                 current_lines.append(line)
                 continue
 
+            if not saw_heading and current_lines and not self._should_keep_preface(current_lines):
+                current_lines = []
+
             saw_heading = True
             flush_section()
             current_no = heading.section_no
@@ -90,3 +91,17 @@ class PolicySectionSplitter:
             sections=sections,
             notes=["优先按章/节/条标题拆分；识别不到时退化为全文。"],
         )
+
+    def _should_keep_preface(self, lines: list[str]) -> bool:
+        joined = "".join(lines).strip()
+        if not joined:
+            return False
+
+        single_char_lines = sum(1 for line in lines if len(line.strip()) == 1)
+        short_lines = sum(1 for line in lines if len(line.strip()) <= 4)
+
+        if single_char_lines >= 2:
+            return False
+        if len(lines) <= 5 and len(joined) <= 24 and short_lines >= len(lines) - 1:
+            return False
+        return True

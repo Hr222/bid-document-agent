@@ -10,7 +10,7 @@ HeadingLevel = Literal[1, 2, 3]
 
 @dataclass(slots=True)
 class PolicyIntakeDecision:
-    """用于表达源文件是否允许进入流水线的领域决策对象。"""
+    """领域层准入决策对象。"""
 
     is_allowed: bool
     detected_file_kind: str
@@ -21,6 +21,7 @@ class PolicyIntakeDecision:
 
 class PolicyIntakePolicy:
     """文件准入规则。"""
+
     _allowed_extensions = {".docx", ".pdf"}
     _excluded_keywords = {
         "身份证",
@@ -91,8 +92,9 @@ class PolicyIntakePolicy:
 
 class PolicyIdentityPolicy:
     """根据文件名推导制度名称和版本标签。"""
+
     _bracket_noise_pattern = re.compile(
-        r"[（(][^（）()]{0,40}(模板|空白|盖章|签字|签名|扫描)[^（）()]{0,40}[）)]"
+        r"[\（(][^\（\）()]{0,40}(模板|空白|盖章|签字|签名|扫描)[^\（\）()]{0,40}[\）)]"
     )
 
     def build_version_label(self, *, explicit_label: str | None, modified_at_text: str) -> str:
@@ -119,9 +121,13 @@ class SectionHeading:
 
 class PolicySectionStructurePolicy:
     """章节标题识别规则。"""
+
     _chapter_pattern = re.compile(rf"^(第{CHINESE_NUMERAL_FRAGMENT}章)\s*(.*)$")
     _section_pattern = re.compile(rf"^(第{CHINESE_NUMERAL_FRAGMENT}节)\s*(.*)$")
     _article_pattern = re.compile(rf"^(第{CHINESE_NUMERAL_FRAGMENT}条)\s*(.*)$")
+    _body_punctuation_pattern = re.compile(r"[，。；：！？]")
+    _article_title_max_length = 18
+    _generic_title_max_length = 40
 
     def match_heading(self, line: str) -> SectionHeading | None:
         stripped = line.strip()
@@ -132,9 +138,15 @@ class PolicySectionStructurePolicy:
         ):
             match = pattern.match(stripped)
             if match:
+                section_no = match.group(1)
+                raw_title = match.group(2).strip()
                 return SectionHeading(
-                    section_no=match.group(1),
-                    section_title=match.group(2).strip() or match.group(1),
+                    section_no=section_no,
+                    section_title=self._resolve_section_title(
+                        section_no=section_no,
+                        raw_title=raw_title,
+                        level=level,
+                    ),
                     section_level=level,
                 )
         return None
@@ -145,6 +157,32 @@ class PolicySectionStructurePolicy:
         if len(current_path) < heading.section_level - 1:
             return current_path + [heading.section_title]
         return current_path[: heading.section_level - 1] + [heading.section_title]
+
+    def _resolve_section_title(
+        self,
+        *,
+        section_no: str,
+        raw_title: str,
+        level: HeadingLevel,
+    ) -> str:
+        if not raw_title:
+            return section_no
+
+        title = re.sub(r"\s+", " ", raw_title).strip()
+        if not title:
+            return section_no
+
+        if level == 3 and self._looks_like_article_body(title):
+            return section_no
+        if len(title) > self._generic_title_max_length and self._body_punctuation_pattern.search(title):
+            return section_no
+        return title
+
+    def _looks_like_article_body(self, title: str) -> bool:
+        return (
+            len(title) > self._article_title_max_length
+            or self._body_punctuation_pattern.search(title) is not None
+        )
 
 
 @dataclass(slots=True)
