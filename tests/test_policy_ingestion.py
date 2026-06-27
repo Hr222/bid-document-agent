@@ -10,10 +10,17 @@ from app.api.deps import get_db_session
 from app.core.config import settings
 from app.db.base import Base
 from app.main import app
-from app.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
-from app.schemas.policy_pipeline import ParsedTextResult, SectionSplitItem, SectionSplitResult
+from app.models import PolicyBlock, PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
+from app.schemas import (
+    OcrProcessResult,
+    ParsedBlock,
+    ParsedDocumentResult,
+    SectionSplitItem,
+    SectionSplitResult,
+)
 from app.services.step.policy_chunking import PolicyChunkingService
 from app.services.step.policy_embedding import PolicyEmbeddingService
+from app.services.step.policy_ocr import PolicyOcrService
 from app.services.step.policy_parser import PolicyParserService
 from app.domain.policy import PolicyChunkingPolicy
 
@@ -31,29 +38,27 @@ def _create_pdf_placeholder(path: Path) -> None:
     path.write_bytes(b"%PDF-1.4 test")
 
 
-def _build_pdf_parse_result(
+def _build_pdf_document_result(
     source_path: str,
     *,
-    raw_text: str,
-    page_count: int = 1,
+    blocks: list[ParsedBlock],
     suspected_scanned: bool = False,
-) -> ParsedTextResult:
-    paragraphs = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    page_count: int = 1,
+) -> ParsedDocumentResult:
     notes: list[str] = []
     if suspected_scanned:
-        notes.append(
-            "Extracted text is too short; this PDF is treated as a likely scan in MVP."
-        )
+        notes.append("Direct text is too short; OCR should continue from block flow.")
 
-    return ParsedTextResult(
+    normalized_blocks = []
+    for index, block in enumerate(blocks):
+        normalized_blocks.append(block.model_copy(update={"order": index}))
+
+    return ParsedDocumentResult(
         parser_status="parsed",
         source_path=source_path,
-        raw_text=raw_text,
-        page_count=page_count,
+        file_type="pdf",
         suspected_scanned=suspected_scanned,
-        paragraphs=paragraphs,
-        tables=[],
-        title_candidates=[line for line in paragraphs if line.startswith("第")],
+        blocks=normalized_blocks,
         notes=notes,
     )
 
@@ -70,6 +75,7 @@ TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit
 with TEST_ENGINE.begin() as conn:
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}"))
+    conn.execute(text("DROP TABLE IF EXISTS kb_policy_block CASCADE"))
     conn.execute(text("DROP TABLE IF EXISTS kb_policy_chunk CASCADE"))
     conn.execute(text("DROP TABLE IF EXISTS kb_policy_section CASCADE"))
     conn.execute(text("DROP TABLE IF EXISTS kb_policy_version CASCADE"))
@@ -130,15 +136,21 @@ def _install_fake_embeddings(
 
 def _truncate_tables() -> None:
     with TEST_ENGINE.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE kb_policy_chunk, kb_policy_section, kb_policy_version, kb_policy_document RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text(
+                "TRUNCATE TABLE kb_policy_block, kb_policy_chunk, kb_policy_section, "
+                "kb_policy_version, kb_policy_document RESTART IDENTITY CASCADE"
+            )
+        )
 
 
 
-def _counts() -> tuple[int, int, int, int]:
+def _counts() -> tuple[int, int, int, int, int]:
     with TestingSessionLocal() as session:
         return (
             session.query(PolicyDocument).count(),
             session.query(PolicyVersion).count(),
+            session.query(PolicyBlock).count(),
             session.query(PolicySection).count(),
             session.query(PolicyChunk).count(),
         )
@@ -214,13 +226,34 @@ def test_policy_pipeline_preview_docx_returns_chunk_summary_and_no_persistence(t
     assert payload["persistence"]["persisted"] is False
     assert payload["persistence"]["chunk_count"] == payload["chunk_result"]["total_chunks"]
     assert _stage_status(payload, "chunk_splitting") == "success"
-    assert _stage_message(payload, "parse_routing") == "已选择解析器：DocxParser。"
-    assert _stage_message(payload, "text_parsing") == "已完成原始文本提取。"
+    assert _stage_message(payload, "parse_routing") == "已选择解析器：DocxBlockParser。"
+    assert _stage_message(payload, "text_assembly") == "已完成全文组装。"
     assert _stage_message(payload, "text_cleaning") == "已完成文本清洗。"
+    assert _stage_status(payload, "ocr_processing") == "skipped"
     assert _stage_status(payload, "embedding_generation") == "skipped"
     assert _stage_status(payload, "chunk_persistence") == "skipped"
-    assert _counts() == (0, 0, 0, 0)
+    assert _counts() == (0, 0, 0, 0, 0)
 
+
+def test_policy_pipeline_preview_empty_docx_keeps_empty_text_without_crashing(
+    tmp_path: Path,
+) -> None:
+    sample = tmp_path / "空文档制度.docx"
+    _create_docx(sample, [])
+
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/preview",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["parsed_text"]["raw_text"] == ""
+    assert payload["parsed_text"]["page_count"] is None
+    assert payload["section_result"]["total_sections"] == 0
+    assert payload["chunk_result"]["total_chunks"] == 0
+    assert _stage_status(payload, "ocr_processing") == "skipped"
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 def test_policy_pipeline_ingest_docx_persists_chunks_and_embeddings(tmp_path: Path) -> None:
@@ -251,6 +284,7 @@ def test_policy_pipeline_ingest_docx_persists_chunks_and_embeddings(tmp_path: Pa
 
     with TestingSessionLocal() as session:
         document = session.query(PolicyDocument).one()
+        blocks = session.query(PolicyBlock).order_by(PolicyBlock.block_index).all()
         version = session.query(PolicyVersion).one()
         sections = session.query(PolicySection).order_by(PolicySection.section_order).all()
         chunks = session.query(PolicyChunk).order_by(PolicyChunk.chunk_index).all()
@@ -262,6 +296,8 @@ def test_policy_pipeline_ingest_docx_persists_chunks_and_embeddings(tmp_path: Pa
         assert version.version_seq == 1
         assert version.revision_type == "initial"
         assert version.parser_status == "parsed"
+        assert version.parse_method == "direct"
+        assert len(blocks) >= 1
         assert len(sections) >= 1
         assert len(chunks) == payload["persistence"]["chunk_count"]
         assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
@@ -329,14 +365,20 @@ def test_policy_pipeline_ingest_pdf_persists_document_version_sections_and_chunk
     _create_pdf_placeholder(sample)
 
     def fake_parse_pdf(self, source_path: str):
-        return _build_pdf_parse_result(
+        return _build_pdf_document_result(
             source_path,
-            raw_text=(
-                "第一章 总则\n"
-                "第一条 为了加强采购管理。\n"
-                "第二条 本制度适用于公司的采购活动。"
-            ),
-            page_count=2,
+            blocks=[
+                ParsedBlock(
+                    block_id="b1",
+                    order=0,
+                    page_no=1,
+                    block_type="text",
+                    source="direct",
+                    text="第一章 总则\n第一条 为了加强采购管理。\n第二条 本制度适用于公司的采购活动。",
+                    metadata={},
+                    layout_hint={},
+                )
+            ],
         )
 
     monkeypatch.setattr(PolicyParserService, "_parse_pdf", fake_parse_pdf)
@@ -353,13 +395,14 @@ def test_policy_pipeline_ingest_pdf_persists_document_version_sections_and_chunk
     with TestingSessionLocal() as session:
         document = session.query(PolicyDocument).one()
         version = session.query(PolicyVersion).one()
+        blocks = session.query(PolicyBlock).all()
         sections = session.query(PolicySection).all()
         chunks = session.query(PolicyChunk).all()
 
         assert document.latest_version_id == version.id
-        assert version.parse_method == "pdf"
+        assert version.parse_method == "direct"
         assert version.file_ext == ".pdf"
-        assert version.page_count == 2
+        assert len(blocks) >= 1
         assert len(sections) >= 1
         assert len(chunks) >= 1
 
@@ -370,13 +413,35 @@ def test_policy_pipeline_preview_scanned_pdf_marks_suspected(tmp_path: Path, mon
     _create_pdf_placeholder(sample)
 
     def fake_parse_pdf(self, source_path: str):
-        return _build_pdf_parse_result(
+        return _build_pdf_document_result(
             source_path,
-            raw_text="图片 扫描",
+            blocks=[
+                ParsedBlock(
+                    block_id="scan-page-1",
+                    order=0,
+                    page_no=1,
+                    block_type="image",
+                    source="direct",
+                    text=None,
+                    metadata={"pdf_page_render": True},
+                    layout_hint={},
+                )
+            ],
             suspected_scanned=True,
         )
 
     monkeypatch.setattr(PolicyParserService, "_parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr(
+        PolicyOcrService,
+        "process",
+        lambda self, document, persist: OcrProcessResult(
+            applied=False,
+            parse_method="direct",
+            blocks=document.blocks,
+            notes=["OCR 未返回有效文本。"],
+            failed_blocks=1,
+        ),
+    )
     response = client.post(
         "/api/v1/kb/policy-pipeline/preview",
         json={"source_path": str(sample), "policy_category": "管理制度"},
@@ -386,7 +451,8 @@ def test_policy_pipeline_preview_scanned_pdf_marks_suspected(tmp_path: Path, mon
     payload = response.json()
     assert payload["parsed_text"]["suspected_scanned"] is True
     assert payload["parsed_text"]["notes"]
-    assert _counts() == (0, 0, 0, 0)
+    assert _stage_status(payload, "ocr_processing") == "failed"
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 
@@ -398,13 +464,35 @@ def test_policy_pipeline_ingest_scanned_pdf_stops_before_persistence(
     _create_pdf_placeholder(sample)
 
     def fake_parse_pdf(self, source_path: str):
-        return _build_pdf_parse_result(
+        return _build_pdf_document_result(
             source_path,
-            raw_text="图片 扫描",
+            blocks=[
+                ParsedBlock(
+                    block_id="scan-page-1",
+                    order=0,
+                    page_no=1,
+                    block_type="image",
+                    source="direct",
+                    text=None,
+                    metadata={"pdf_page_render": True},
+                    layout_hint={},
+                )
+            ],
             suspected_scanned=True,
         )
 
     monkeypatch.setattr(PolicyParserService, "_parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr(
+        PolicyOcrService,
+        "process",
+        lambda self, document, persist: OcrProcessResult(
+            applied=False,
+            parse_method="direct",
+            blocks=document.blocks,
+            notes=["OCR 未返回有效文本。"],
+            failed_blocks=1,
+        ),
+    )
     response = client.post(
         "/api/v1/kb/policy-pipeline/ingest",
         json={"source_path": str(sample), "policy_category": "管理制度"},
@@ -413,9 +501,146 @@ def test_policy_pipeline_ingest_scanned_pdf_stops_before_persistence(
     assert response.status_code == 200
     payload = response.json()
     assert payload["persistence"]["persisted"] is False
-    assert _stage_status(payload, "document_persistence") == "failed"
-    assert _counts() == (0, 0, 0, 0)
+    assert _stage_status(payload, "ocr_processing") == "failed"
+    assert _stage_status(payload, "ingest_guard") == "failed"
+    assert _counts() == (0, 0, 0, 0, 0)
 
+
+def test_policy_pipeline_ingest_scanned_pdf_with_ocr_persists_as_ocr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = tmp_path / "扫描制度.pdf"
+    _create_pdf_placeholder(sample)
+
+    def fake_parse_pdf(self, source_path: str):
+        return _build_pdf_document_result(
+            source_path,
+            blocks=[
+                ParsedBlock(
+                    block_id="scan-page-1",
+                    order=0,
+                    page_no=1,
+                    block_type="image",
+                    source="direct",
+                    text=None,
+                    metadata={"pdf_page_render": True},
+                    layout_hint={},
+                )
+            ],
+            suspected_scanned=True,
+        )
+
+    monkeypatch.setattr(PolicyParserService, "_parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr(
+        PolicyOcrService,
+        "process",
+        lambda self, document, persist: OcrProcessResult(
+            applied=True,
+            parse_method="ocr",
+            blocks=[
+                document.blocks[0].model_copy(
+                    update={
+                        "text": "第一章 总则\n第一条 扫描件 OCR 已恢复正文。",
+                        "source": "ocr",
+                        "metadata": {},
+                    }
+                )
+            ],
+            notes=["OCR 已恢复有效正文。"],
+            failed_blocks=0,
+        ),
+    )
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/ingest",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["parsed_text"]["parse_method"] == "ocr"
+    assert payload["persistence"]["persisted"] is True
+
+    with TestingSessionLocal() as session:
+        version = session.query(PolicyVersion).one()
+        assert version.parse_method == "ocr"
+
+
+def test_policy_pipeline_preview_docx_with_image_ocr_marks_mixed_parse_method(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = tmp_path / "图文制度.docx"
+    sample.write_bytes(b"docx-placeholder")
+
+    def fake_parse_docx(self, source_path: str):
+        return ParsedDocumentResult(
+            parser_status="parsed",
+            source_path=source_path,
+            file_type="docx",
+            suspected_scanned=False,
+            blocks=[
+                ParsedBlock(
+                    block_id="t1",
+                    order=0,
+                    page_no=None,
+                    block_type="text",
+                    source="direct",
+                    text="第一章 总则",
+                    metadata={},
+                    layout_hint={},
+                ),
+                ParsedBlock(
+                    block_id="i1",
+                    order=1,
+                    page_no=None,
+                    block_type="image",
+                    source="direct",
+                    text=None,
+                    metadata={"image_bytes": "00"},
+                    layout_hint={},
+                ),
+                ParsedBlock(
+                    block_id="t2",
+                    order=2,
+                    page_no=None,
+                    block_type="text",
+                    source="direct",
+                    text="第二条 图片下方的正文。",
+                    metadata={},
+                    layout_hint={},
+                ),
+            ],
+            notes=[],
+        )
+
+    monkeypatch.setattr(PolicyParserService, "_parse_docx", fake_parse_docx)
+    monkeypatch.setattr(
+        PolicyOcrService,
+        "process",
+        lambda self, document, persist: OcrProcessResult(
+            applied=True,
+            parse_method="mixed",
+            blocks=[
+                document.blocks[0],
+                document.blocks[1].model_copy(
+                    update={"text": "图片中的补充条文。", "source": "ocr", "metadata": {}}
+                ),
+                document.blocks[2],
+            ],
+            notes=["图文混合文档已补充图片文字。"],
+            failed_blocks=0,
+        ),
+    )
+    response = client.post(
+        "/api/v1/kb/policy-pipeline/preview",
+        json={"source_path": str(sample), "policy_category": "管理制度"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["parsed_text"]["parse_method"] == "mixed"
+    assert payload["parsed_text"]["notes"]
 
 
 def test_policy_pipeline_ingest_without_headings_creates_full_text_section(tmp_path: Path) -> None:
@@ -487,7 +712,7 @@ def test_policy_pipeline_ingest_excluded_keyword_file_fails_before_persistence(t
     assert response.status_code == 200
     payload = response.json()
     assert payload["validation"]["is_allowed"] is False
-    assert _counts() == (0, 0, 0, 0)
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 
@@ -506,7 +731,7 @@ def test_policy_pipeline_ingest_rolls_back_when_embedding_generation_fails(
 
     assert response.status_code == 400
     assert "向量生成失败" in response.json()["detail"]
-    assert _counts() == (0, 0, 0, 0)
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 
@@ -525,7 +750,7 @@ def test_policy_pipeline_ingest_rolls_back_when_embedding_dimension_mismatches(
 
     assert response.status_code == 400
     assert "向量维度不匹配" in response.json()["detail"]
-    assert _counts() == (0, 0, 0, 0)
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 
@@ -618,7 +843,7 @@ def test_policy_pipeline_preview_upload_returns_upload_id_chunk_summary_and_no_p
     assert payload["upload_id"]
     assert payload["parsed_text"]["parser_status"] == "parsed"
     assert payload["chunk_result"]["total_chunks"] >= 1
-    assert _counts() == (0, 0, 0, 0)
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 

@@ -5,8 +5,20 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.policy import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
-from app.schemas.policy_pipeline import ChunkItem, CleanedTextResult, RegisteredFileInfo, SectionSplitItem
+from app.models import (
+    PolicyBlock,
+    PolicyChunk,
+    PolicyDocument,
+    PolicySection,
+    PolicyVersion,
+)
+from app.schemas import (
+    ChunkItem,
+    CleanedTextResult,
+    ParsedBlock,
+    RegisteredFileInfo,
+    SectionSplitItem,
+)
 
 
 @dataclass(slots=True)
@@ -15,8 +27,25 @@ class PersistedPolicyRecords:
 
     document: PolicyDocument
     version: PolicyVersion
+    blocks: list[PolicyBlock]
     sections: list[PolicySection]
     chunks: list[PolicyChunk]
+
+
+@dataclass(slots=True)
+class RetrievedPolicyChunk:
+    document_id: int
+    version_id: int
+    chunk_id: int
+    policy_name: str
+    policy_category: str
+    responsible_department: str | None
+    version_label: str
+    section_title: str | None
+    section_path: str | None
+    page_no: int | None
+    chunk_text: str
+    score: float
 
 
 class PolicyRepository:
@@ -25,7 +54,7 @@ class PolicyRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def save_document_version_sections_and_chunks(
+    def save_document_version_blocks_sections_and_chunks(
         self,
         *,
         policy_name: str,
@@ -38,10 +67,11 @@ class PolicyRepository:
         is_scanned: bool,
         raw_text: str,
         cleaned_text: CleanedTextResult,
+        blocks: list[ParsedBlock],
         sections: list[SectionSplitItem],
         chunks: list[ChunkItem],
     ) -> PersistedPolicyRecords:
-        """在一个事务里保存 document、version、section、chunk。"""
+        """在一个事务里保存 document、version、block、section、chunk。"""
         try:
             document = self._get_or_create_document(
                 policy_name=policy_name,
@@ -58,9 +88,11 @@ class PolicyRepository:
                 raw_text=raw_text,
                 cleaned_text=cleaned_text,
             )
+            persisted_blocks = self._create_blocks(version=version, blocks=blocks)
             persisted_sections = self._create_sections(version=version, sections=sections)
             persisted_chunks = self._create_chunks(
                 version=version,
+                blocks=persisted_blocks,
                 sections=persisted_sections,
                 chunks=chunks,
             )
@@ -73,12 +105,81 @@ class PolicyRepository:
             return PersistedPolicyRecords(
                 document=document,
                 version=version,
+                blocks=persisted_blocks,
                 sections=persisted_sections,
                 chunks=persisted_chunks,
             )
         except Exception:
             self.session.rollback()
             raise
+
+    def search_chunks(
+        self,
+        *,
+        query_embedding: list[float],
+        top_k: int,
+        policy_category: str | None = None,
+        responsible_department: str | None = None,
+        document_id: int | None = None,
+        include_history: bool = False,
+    ) -> list[RetrievedPolicyChunk]:
+        distance_expr = PolicyChunk.embedding.cosine_distance(query_embedding)
+
+        statement = (
+            select(
+                PolicyDocument.id.label("document_id"),
+                PolicyVersion.id.label("version_id"),
+                PolicyChunk.id.label("chunk_id"),
+                PolicyDocument.policy_name.label("policy_name"),
+                PolicyDocument.policy_category.label("policy_category"),
+                PolicyDocument.responsible_department.label("responsible_department"),
+                PolicyVersion.version_label.label("version_label"),
+                PolicySection.section_title.label("section_title"),
+                PolicySection.section_path.label("section_path"),
+                PolicyChunk.page_no.label("page_no"),
+                PolicyChunk.chunk_text.label("chunk_text"),
+                distance_expr.label("distance"),
+            )
+            .join(PolicyVersion, PolicyVersion.id == PolicyChunk.version_id)
+            .join(PolicyDocument, PolicyDocument.id == PolicyVersion.policy_id)
+            .outerjoin(PolicySection, PolicySection.id == PolicyChunk.section_id)
+            .where(PolicyVersion.version_status.in_(("draft", "approved", "active")))
+        )
+
+        if not include_history:
+            statement = statement.where(PolicyDocument.latest_version_id == PolicyVersion.id)
+        if policy_category:
+            statement = statement.where(PolicyDocument.policy_category == policy_category)
+        if responsible_department:
+            statement = statement.where(
+                PolicyDocument.responsible_department == responsible_department
+            )
+        if document_id is not None:
+            statement = statement.where(PolicyDocument.id == document_id)
+
+        rows = self.session.execute(statement.order_by(distance_expr.asc()).limit(top_k)).all()
+
+        results: list[RetrievedPolicyChunk] = []
+        for row in rows:
+            distance = float(row.distance)
+            score = max(0.0, 1.0 - distance)
+            results.append(
+                RetrievedPolicyChunk(
+                    document_id=row.document_id,
+                    version_id=row.version_id,
+                    chunk_id=row.chunk_id,
+                    policy_name=row.policy_name,
+                    policy_category=row.policy_category,
+                    responsible_department=row.responsible_department,
+                    version_label=row.version_label,
+                    section_title=row.section_title,
+                    section_path=row.section_path,
+                    page_no=row.page_no,
+                    chunk_text=row.chunk_text,
+                    score=score,
+                )
+            )
+        return results
 
     def _get_or_create_document(
         self,
@@ -213,14 +314,48 @@ class PolicyRepository:
         self.session.flush()
         return persisted_sections
 
+    def _create_blocks(
+        self,
+        *,
+        version: PolicyVersion,
+        blocks: list[ParsedBlock],
+    ) -> list[PolicyBlock]:
+        persisted_blocks: list[PolicyBlock] = []
+        for item in blocks:
+            block = PolicyBlock(
+                version_id=version.id,
+                block_index=item.order,
+                page_no=item.page_no,
+                block_type=item.block_type,
+                source_method=item.source,
+                text=item.text,
+                layout_hint=item.layout_hint,
+                block_metadata=self._sanitize_block_metadata(item.metadata),
+            )
+            self.session.add(block)
+            persisted_blocks.append(block)
+
+        self.session.flush()
+        return persisted_blocks
+
+    def _sanitize_block_metadata(self, metadata: dict) -> dict:
+        # 图像原始字节和 PDF 渲染标记仅用于运行期 OCR，不进入正式存储。
+        return {
+            key: value
+            for key, value in metadata.items()
+            if key not in {"image_bytes", "pdf_page_render"}
+        }
+
     def _create_chunks(
         self,
         *,
         version: PolicyVersion,
+        blocks: list[PolicyBlock],
         sections: list[PolicySection],
         chunks: list[ChunkItem],
     ) -> list[PolicyChunk]:
-        # 先拿到 section 的真实主键，再补进 chunk metadata。
+        # 先拿到 section / block 的真实主键，再补进 chunk metadata。
+        block_by_index = {block.block_index: block for block in blocks}
         section_by_order = {section.section_order: section for section in sections}
         persisted_chunks: list[PolicyChunk] = []
 
@@ -229,9 +364,21 @@ class PolicyRepository:
                 raise RuntimeError("切块在落库前缺少向量。")
 
             section = section_by_order.get(item.section_order)
+            start_block = (
+                block_by_index.get(item.source_block_start)
+                if item.source_block_start is not None
+                else None
+            )
+            end_block = (
+                block_by_index.get(item.source_block_end)
+                if item.source_block_end is not None
+                else None
+            )
             metadata = {
                 **item.metadata,
                 "section_id": section.id if section is not None else None,
+                "source_block_start": start_block.id if start_block is not None else None,
+                "source_block_end": end_block.id if end_block is not None else None,
             }
             chunk = PolicyChunk(
                 version_id=version.id,

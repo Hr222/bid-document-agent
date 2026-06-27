@@ -7,7 +7,8 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.policy import PolicyIdentityPolicy
 from app.repositories.policy_repository import PolicyRepository
-from app.schemas.policy_pipeline import (
+from app.schemas import (
+    ParsedDocumentResult,
     PersistenceResult,
     PolicyPipelineRequest,
     PolicyPipelineResponse,
@@ -19,8 +20,10 @@ from app.services.step.policy_chunking import PolicyChunkingService
 from app.services.step.policy_embedding import PolicyEmbeddingService
 from app.services.step.policy_file_service import PolicyFileService
 from app.services.step.policy_normalizer import PolicyFormatNormalizer
+from app.services.step.policy_ocr import PolicyOcrService
 from app.services.step.policy_parser import PolicyParserService
 from app.services.step.policy_section_splitter import PolicySectionSplitter
+from app.services.step.policy_text_assembler import PolicyTextAssemblerService
 from app.services.step.policy_text_cleaner import PolicyTextCleaner
 
 logger = get_logger("app.pipeline.policy")
@@ -38,6 +41,8 @@ class PolicyPipelineService:
         self.file_service = PolicyFileService()
         self.normalizer = PolicyFormatNormalizer(workspace_root=workspace_root)
         self.parser = PolicyParserService()
+        self.ocr_service = PolicyOcrService()
+        self.text_assembler = PolicyTextAssemblerService()
         self.cleaner = PolicyTextCleaner()
         self.section_splitter = PolicySectionSplitter()
         self.chunking_service = PolicyChunkingService()
@@ -61,7 +66,7 @@ class PolicyPipelineService:
         context = PipelineContext(request=request, mode=mode, persist=persist)
         builder = PipelineResponseBuilder(context)
         logger.info(
-            "Pipeline started mode=%s persist=%s source_path=%s category=%s",
+            "流水线开始 mode=%s persist=%s source_path=%s category=%s",
             mode,
             persist,
             request.source_path,
@@ -73,7 +78,9 @@ class PolicyPipelineService:
             self._validate_intake,
             self._normalize,
             self._route_parser,
-            self._parse_text,
+            self._parse_document,
+            self._run_ocr,
+            self._assemble_text,
             self._guard_ingest_eligibility,
             self._clean_text,
             self._split_sections,
@@ -84,13 +91,13 @@ class PolicyPipelineService:
         for stage in stages:
             stage_name = stage.__name__.removeprefix("_")
             started = perf_counter()
-            logger.info("Pipeline stage started mode=%s stage=%s", mode, stage_name)
+            logger.info("阶段开始 mode=%s stage=%s", mode, stage_name)
             try:
                 stage(context, builder)
             except Exception:
                 duration_ms = (perf_counter() - started) * 1000
                 logger.exception(
-                    "Pipeline stage failed mode=%s stage=%s duration_ms=%.2f",
+                    "阶段失败 mode=%s stage=%s duration_ms=%.2f",
                     mode,
                     stage_name,
                     duration_ms,
@@ -99,19 +106,19 @@ class PolicyPipelineService:
 
             duration_ms = (perf_counter() - started) * 1000
             logger.info(
-                "Pipeline stage finished mode=%s stage=%s stop_requested=%s duration_ms=%.2f",
+                "阶段完成 mode=%s stage=%s stop_requested=%s duration_ms=%.2f",
                 mode,
                 stage_name,
                 context.stop_requested,
                 duration_ms,
             )
             if context.stop_requested:
-                logger.warning("Pipeline stopped early mode=%s stage=%s", mode, stage_name)
+                logger.warning("流水线提前结束 mode=%s stage=%s", mode, stage_name)
                 break
 
         response = builder.build()
         logger.info(
-            "Pipeline finished mode=%s stage_count=%s persisted=%s source_path=%s",
+            "流水线结束 mode=%s stage_count=%s persisted=%s source_path=%s",
             mode,
             len(response.stages),
             response.persistence.persisted if response.persistence is not None else False,
@@ -186,7 +193,7 @@ class PolicyPipelineService:
         builder.set_parse_routing(parse_routing)
         builder.success("parse_routing", f"已选择解析器：{parse_routing.parser_name}。")
 
-    def _parse_text(
+    def _parse_document(
         self,
         context: PipelineContext,
         builder: PipelineResponseBuilder,
@@ -196,38 +203,99 @@ class PolicyPipelineService:
         if context.parse_routing is None:
             raise RuntimeError("执行文本解析前缺少解析器选择结果。")
 
-        parsed_text = self.parser.parse(
+        parsed_document = self.parser.parse_document(
             source_path=context.normalization.normalized_path,
             parse_method=context.parse_routing.parse_method,
+        )
+        builder.set_parsed_document(parsed_document)
+        if parsed_document.parser_status == "failed":
+            builder.failed(
+                "document_parsing",
+                builder.join_messages(parsed_document.notes, "结构化文档解析失败。"),
+                stop=True,
+            )
+            return
+        builder.success("document_parsing", "已完成有序 block 解析。")
+
+    def _run_ocr(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.parsed_document is None:
+            raise RuntimeError("执行 OCR 前缺少结构化文档解析结果。")
+
+        original_document = context.parsed_document
+        ocr_result = self.ocr_service.process(original_document, persist=context.persist)
+        builder.set_ocr_result(ocr_result)
+
+        updated_document = original_document.model_copy(
+            update={
+                "blocks": ocr_result.blocks,
+                "notes": [*original_document.notes, *ocr_result.notes],
+            }
+        )
+        builder.set_parsed_document(updated_document)
+
+        builder.record(
+            "ocr_processing",
+            self._resolve_ocr_stage_status(
+                document=original_document,
+                ocr_applied=ocr_result.applied,
+                failed_blocks=ocr_result.failed_blocks,
+            ),
+            builder.join_messages(ocr_result.notes, "当前无需执行 OCR。"),
+        )
+
+    def _assemble_text(
+        self,
+        context: PipelineContext,
+        builder: PipelineResponseBuilder,
+    ) -> None:
+        if context.parsed_document is None:
+            raise RuntimeError("执行全文组装前缺少结构化文档解析结果。")
+
+        parse_method = (
+            context.ocr_result.parse_method if context.ocr_result is not None else "direct"
+        )
+        parsed_text = self.text_assembler.assemble(
+            context.parsed_document,
+            parse_method=parse_method,
         )
         builder.set_parsed_text(parsed_text)
         if parsed_text.parser_status == "failed":
             builder.failed(
-                "text_parsing",
-                builder.join_messages(parsed_text.notes, "文本解析失败。"),
+                "text_assembly",
+                builder.join_messages(parsed_text.notes, "全文组装失败。"),
                 stop=True,
             )
             return
-        builder.success("text_parsing", builder.parsing_message(parsed_text))
+        builder.success("text_assembly", builder.parsing_message(parsed_text))
 
     def _guard_ingest_eligibility(
         self,
         context: PipelineContext,
         builder: PipelineResponseBuilder,
     ) -> None:
-        if not context.persist or context.parsed_text is None:
+        if not context.persist:
+            builder.skipped("ingest_guard", "预览模式不执行入库拦截判断。")
             return
-        if not context.parsed_text.suspected_scanned:
+        if context.parsed_text is None:
             return
 
-        message = "疑似扫描版 PDF，入库前终止，请先确认 OCR 或解析质量。"
+        effective_text = context.parsed_text.raw_text.strip()
+        if effective_text:
+            builder.success("ingest_guard", "文本满足入库条件。")
+            return
+
+        message = "文档在直接解析和 OCR 后仍未形成有效正文，入库前终止。"
         builder.set_persistence(
             PersistenceResult(
                 persisted=False,
                 message=message,
             )
         )
-        builder.failed("document_persistence", message, stop=True)
+        builder.failed("ingest_guard", message, stop=True)
 
     def _clean_text(
         self,
@@ -266,7 +334,7 @@ class PolicyPipelineService:
 
         chunk_result = self.chunking_service.split(context.section_result)
         logger.info(
-            "Chunk splitting result source_path=%s total_sections=%s total_chunks=%s sample_chunks=%s",
+            "切块完成 source_path=%s total_sections=%s total_chunks=%s sample_chunks=%s",
             context.request.source_path,
             context.section_result.total_sections,
             chunk_result.total_chunks,
@@ -289,7 +357,7 @@ class PolicyPipelineService:
 
         embedding_service = PolicyEmbeddingService()
         logger.info(
-            "Embedding stage requested source_path=%s total_chunks=%s",
+            "请求生成向量 source_path=%s total_chunks=%s",
             context.request.source_path,
             context.chunk_result.total_chunks,
         )
@@ -326,7 +394,7 @@ class PolicyPipelineService:
 
         persistence = self.persistence_service.persist(context)
         logger.info(
-            "Chunk persistence result source_path=%s document_id=%s version_id=%s section_count=%s chunk_count=%s",
+            "落库完成 source_path=%s document_id=%s version_id=%s section_count=%s chunk_count=%s",
             context.request.source_path,
             persistence.document_id,
             persistence.version_id,
@@ -339,3 +407,25 @@ class PolicyPipelineService:
             f"已写入 {persistence.chunk_count} 个切块及其向量。",
         )
         builder.record_persistence_stage()
+
+    def _resolve_ocr_stage_status(
+        self,
+        *,
+        document: ParsedDocumentResult,
+        ocr_applied: bool,
+        failed_blocks: int,
+    ) -> str:
+        # “没有 OCR 场景”和“OCR 没跑出来结果”需要分开，
+        # 否则审核和排障时很难判断是真跳过还是实际失败。
+        needs_ocr = any(
+            block.block_type == "image"
+            and (block.metadata.get("image_bytes") or block.metadata.get("pdf_page_render"))
+            for block in document.blocks
+        )
+        if not needs_ocr:
+            return "skipped"
+        if ocr_applied:
+            return "success"
+        if failed_blocks > 0:
+            return "failed"
+        return "skipped"

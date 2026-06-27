@@ -1,4 +1,4 @@
-from app.schemas.policy_pipeline import CleanedTextResult
+from app.schemas import CleanedTextResult
 from app.services.step.policy_section_splitter import PolicySectionSplitter
 
 

@@ -28,6 +28,7 @@
 |---|---|---|---|
 | 主档层 | `kb_policy_document` | 记录资料本体 | 一条主档对应一项制度或绩效考核资料 |
 | 版本层 | `kb_policy_version` | 记录具体版本 | 一条主档下面可以挂多个版本 |
+| 块流层 | `kb_policy_block` | 记录文档 block 流 | 保存 OCR 来源、页码和原始顺序位置 |
 | 正文层 | `kb_policy_section` | 记录结构化条文 | 按章、条、款拆分正文 |
 | 检索层 | `kb_policy_chunk` | 记录 RAG 切块 | 用于向量检索和召回 |
 | 审核层 | `kb_policy_review_record` | 记录审核动作 | 保存审核意见和时间 |

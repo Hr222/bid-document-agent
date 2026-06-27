@@ -64,6 +64,34 @@ textarea {
   align-items: start;
 }
 
+.tab-strip {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.tab-button {
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #334155;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.tab-button.active {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+}
+
 .panel {
   background: #ffffff;
   border: 1px solid #d8e0ea;
@@ -114,10 +142,37 @@ textarea {
   padding: 8px 10px;
 }
 
+.query-textarea {
+  width: 100%;
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  resize: vertical;
+  line-height: 1.65;
+  color: #172033;
+  background: #ffffff;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+}
+
+.checkbox-field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
 }
 
 .file-summary {

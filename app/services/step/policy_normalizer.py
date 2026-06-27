@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from app.schemas.policy_pipeline import FormatNormalizationResult, RegisteredFileInfo
+from app.schemas import FormatNormalizationResult, RegisteredFileInfo
 
 
 class PolicyFormatNormalizer:
@@ -16,13 +16,8 @@ class PolicyFormatNormalizer:
         """
         步骤 3：把旧版 Word 文档转换成 `.docx` 派生文件。
 
-        把旧版 Word 文档转换成 `.docx` 派生文件。
-
         原始文件不会被覆盖，只会生成一个标准化副本，
-        这样后续解析阶段始终面对可预期的统一格式。
-
-        当前 MVP 只允许 `.docx` / `.pdf`，
-        所以这一步在现阶段通常表现为 `skipped`。
+        这样后续解析阶段始终面对统一格式。
         """
         if registered_file.extension != ".doc":
             return FormatNormalizationResult(
@@ -31,7 +26,7 @@ class PolicyFormatNormalizer:
                 normalized_path=registered_file.source_path,
                 output_extension=registered_file.extension,
                 converter="none",
-                message="只有旧版 .doc 文件才需要归一化。",
+                message="只有旧版 .doc 文件才需要格式归一化。",
             )
 
         source_path = Path(registered_file.source_path)
@@ -74,10 +69,8 @@ class PolicyFormatNormalizer:
         """
         在 Windows 上通过本机 Microsoft Word COM 自动化执行格式转换。
 
-        这是步骤 3 的底层适配实现，不直接暴露给上层编排器。
-
-        这里单独封装成一个方法，是因为它强依赖宿主环境。
-        如果后面改用 LibreOffice，只需要替换这一层适配器。
+        这里单独封装成适配层，后续如果改用 LibreOffice，
+        只需要替换这一层实现。
         """
         script = f"""
 $ErrorActionPreference = 'Stop'
