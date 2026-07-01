@@ -1,12 +1,16 @@
 import type { FormEvent } from "react";
 
 import { UI_TEXT } from "../constants/uiText";
+import type { PolicyDocumentOption } from "../types/knowledgeBase";
 
 type UploadFormProps = {
   selectedFile: File | null;
   policyCategory: string;
   responsibleDepartment: string;
   versionLabel: string;
+  documentSearch: string;
+  documentOptions: PolicyDocumentOption[];
+  selectedTargetDocumentId: string;
   loadingAction: "preview" | "ingest" | null;
   canPreview: boolean;
   canIngest: boolean;
@@ -15,6 +19,8 @@ type UploadFormProps = {
   onPolicyCategoryChange: (value: string) => void;
   onResponsibleDepartmentChange: (value: string) => void;
   onVersionLabelChange: (value: string) => void;
+  onDocumentSearchChange: (value: string) => void;
+  onTargetDocumentChange: (value: string) => void;
   onPreview: (event: FormEvent<HTMLFormElement>) => void;
   onIngest: () => void;
 };
@@ -32,6 +38,9 @@ export function UploadForm({
   policyCategory,
   responsibleDepartment,
   versionLabel,
+  documentSearch,
+  documentOptions,
+  selectedTargetDocumentId,
   loadingAction,
   canPreview,
   canIngest,
@@ -40,6 +49,8 @@ export function UploadForm({
   onPolicyCategoryChange,
   onResponsibleDepartmentChange,
   onVersionLabelChange,
+  onDocumentSearchChange,
+  onTargetDocumentChange,
   onPreview,
   onIngest,
 }: UploadFormProps) {
@@ -87,6 +98,29 @@ export function UploadForm({
           placeholder={UI_TEXT.versionPlaceholder}
         />
       </label>
+
+      <div className="field">
+        <span>{UI_TEXT.targetDocumentLabel}</span>
+        <input
+          value={documentSearch}
+          onChange={(event) => onDocumentSearchChange(event.target.value)}
+          placeholder={UI_TEXT.targetDocumentSearchPlaceholder}
+        />
+        <select
+          className="select-field"
+          value={selectedTargetDocumentId}
+          onChange={(event) => onTargetDocumentChange(event.target.value)}
+        >
+          <option value="">{UI_TEXT.targetDocumentEmptyOption}</option>
+          {documentOptions.map((item) => (
+            <option key={item.document_id} value={item.document_id}>
+              {`${item.policy_name} · ${item.policy_category}${
+                item.latest_version_label ? ` · ${item.latest_version_label}` : ""
+              }`}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="file-summary">
         <span>{UI_TEXT.currentFile}</span>

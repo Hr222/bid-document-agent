@@ -75,13 +75,13 @@ TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit
 with TEST_ENGINE.begin() as conn:
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_block CASCADE"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_chunk CASCADE"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_section CASCADE"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_version CASCADE"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_document CASCADE"))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_block CASCADE'))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_chunk CASCADE'))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_section CASCADE'))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_version CASCADE'))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_document CASCADE'))
 
-Base.metadata.create_all(bind=TEST_ENGINE)
+Base.metadata.create_all(bind=TEST_ENGINE, checkfirst=False)
 
 
 @pytest.fixture(autouse=True)
@@ -138,8 +138,11 @@ def _truncate_tables() -> None:
     with TEST_ENGINE.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE kb_policy_block, kb_policy_chunk, kb_policy_section, "
-                "kb_policy_version, kb_policy_document RESTART IDENTITY CASCADE"
+                f'TRUNCATE TABLE "{TEST_SCHEMA}".kb_policy_block, '
+                f'"{TEST_SCHEMA}".kb_policy_chunk, '
+                f'"{TEST_SCHEMA}".kb_policy_section, '
+                f'"{TEST_SCHEMA}".kb_policy_version, '
+                f'"{TEST_SCHEMA}".kb_policy_document RESTART IDENTITY CASCADE'
             )
         )
 
@@ -355,6 +358,92 @@ def test_policy_pipeline_ingest_same_policy_reuses_document_and_separates_versio
         assert sum(1 for chunk in chunks if chunk.version_id == versions[0].id) > 0
         assert sum(1 for chunk in chunks if chunk.version_id == versions[1].id) > 0
 
+
+
+def test_policy_pipeline_ingest_can_attach_new_version_to_explicit_document_id(
+    tmp_path: Path,
+) -> None:
+    first_sample = tmp_path / "6、示例公司人事管理制度.docx"
+    second_sample = tmp_path / "4-3人事管理制度.docx"
+
+    _create_docx(
+        first_sample,
+        ["第一章 总则", "第一条 第一版内容。", "第二条 第一版补充要求。"],
+    )
+    first = client.post(
+        "/api/v1/kb/policy-pipeline/ingest",
+        json={
+            "source_path": str(first_sample),
+            "policy_category": "制度管理",
+            "version_label": "v1",
+        },
+    )
+    assert first.status_code == 200
+    target_document_id = first.json()["persistence"]["document_id"]
+
+    _create_docx(
+        second_sample,
+        ["第一章 总则", "第一条 第二版内容。", "第二条 第二版补充要求。"],
+    )
+    second = client.post(
+        "/api/v1/kb/policy-pipeline/ingest",
+        json={
+            "source_path": str(second_sample),
+            "policy_category": "制度管理",
+            "version_label": "v2",
+            "target_document_id": target_document_id,
+        },
+    )
+    assert second.status_code == 200
+
+    with TestingSessionLocal() as session:
+        assert session.query(PolicyDocument).count() == 1
+        versions = session.query(PolicyVersion).order_by(PolicyVersion.version_seq).all()
+        assert len(versions) == 2
+        assert versions[0].policy_id == target_document_id
+        assert versions[1].policy_id == target_document_id
+        assert versions[1].version_seq == 2
+        assert versions[1].version_label == "v2"
+        assert versions[1].previous_version_id == versions[0].id
+
+
+def test_policy_pipeline_ingest_upload_rejects_missing_target_document_before_embedding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = tmp_path / "policy.docx"
+    _create_docx(sample, ["Chapter 1", "This is the first version content."])
+
+    def fail_if_embed_called(self, chunks):
+        raise AssertionError("embedding should not run when target_document_id is invalid")
+
+    monkeypatch.setattr(PolicyEmbeddingService, "embed_chunks", fail_if_embed_called)
+
+    preview = client.post(
+        "/api/v1/kb/policy-pipeline/preview-upload",
+        files={
+            "file": (
+                sample.name,
+                sample.read_bytes(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"policy_category": "绠＄悊鍒跺害"},
+    )
+    assert preview.status_code == 200
+
+    ingest = client.post(
+        "/api/v1/kb/policy-pipeline/ingest-upload",
+        json={
+            "upload_id": preview.json()["upload_id"],
+            "policy_category": "绠＄悊鍒跺害",
+            "target_document_id": 999999,
+        },
+    )
+
+    assert ingest.status_code == 400
+    assert "不存在" in ingest.json()["detail"]
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 def test_policy_pipeline_ingest_pdf_persists_document_version_sections_and_chunks(
@@ -845,6 +934,22 @@ def test_policy_pipeline_preview_upload_returns_upload_id_chunk_summary_and_no_p
     assert payload["chunk_result"]["total_chunks"] >= 1
     assert _counts() == (0, 0, 0, 0, 0)
 
+
+
+def test_policy_pipeline_preview_upload_rejects_legacy_doc(tmp_path: Path) -> None:
+    sample = tmp_path / "legacy-policy.doc"
+    sample.write_bytes(b"legacy-doc-placeholder")
+
+    with sample.open("rb") as handle:
+        response = client.post(
+            "/api/v1/kb/policy-pipeline/preview-upload",
+            data={"policy_category": "管理制度"},
+            files={"file": (sample.name, handle, "application/msword")},
+        )
+
+    assert response.status_code == 400
+    assert "仅支持 .docx / .pdf" in response.json()["detail"]
+    assert _counts() == (0, 0, 0, 0, 0)
 
 
 def test_policy_pipeline_ingest_upload_uses_staged_file(tmp_path: Path) -> None:

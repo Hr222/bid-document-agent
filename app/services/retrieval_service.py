@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.core.config import settings
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas import (
     RetrievalFilters,
@@ -31,6 +32,9 @@ class KnowledgeRetrievalService:
             document_id=request.document_id,
             include_history=request.include_history,
         )
+        matches = [
+            item for item in matches if item.score >= settings.retrieval_min_score
+        ]
 
         hits = [
             RetrievalHit(

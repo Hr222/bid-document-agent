@@ -31,12 +31,12 @@ TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit
 with TEST_ENGINE.begin() as conn:
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_chunk CASCADE"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_section CASCADE"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_version CASCADE"))
-    conn.execute(text("DROP TABLE IF EXISTS kb_policy_document CASCADE"))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_chunk CASCADE'))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_section CASCADE'))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_version CASCADE'))
+    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_document CASCADE'))
 
-Base.metadata.create_all(bind=TEST_ENGINE)
+Base.metadata.create_all(bind=TEST_ENGINE, checkfirst=False)
 
 
 def override_get_db_session():
@@ -52,8 +52,10 @@ def _reset_tables() -> None:
     with TEST_ENGINE.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE kb_policy_chunk, kb_policy_section, "
-                "kb_policy_version, kb_policy_document RESTART IDENTITY CASCADE"
+                f'TRUNCATE TABLE "{TEST_SCHEMA}".kb_policy_chunk, '
+                f'"{TEST_SCHEMA}".kb_policy_section, '
+                f'"{TEST_SCHEMA}".kb_policy_version, '
+                f'"{TEST_SCHEMA}".kb_policy_document RESTART IDENTITY CASCADE'
             )
         )
 
@@ -397,6 +399,39 @@ def test_search_api_returns_rank_score_and_metadata(
     assert payload["hits"][0]["section_title"] == "审批流程"
     assert payload["hits"][0]["page_no"] == 6
     assert payload["hits"][0]["score"] >= payload["hits"][1]["score"]
+
+
+def test_search_api_filters_low_score_hits_as_no_result(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _create_policy_document(
+        db_session,
+        policy_name="人事管理制度",
+        policy_category="管理制度",
+        responsible_department="综合管理部",
+        versions=[
+            {
+                "version_label": "v2",
+                "section_title": "录用",
+                "section_path": "第一章 录用",
+                "chunk_text": "录用相关制度内容。",
+                "embedding": _vector(0.4175, 0.9),
+                "page_no": 1,
+            }
+        ],
+    )
+    _install_fake_query_embedding(monkeypatch, vector=_vector(1.0, 0.0))
+
+    response = client.post(
+        "/api/v1/kb/retrieval/search",
+        json={"query": "腾讯QQ", "top_k": 10},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["hits"] == []
 
 
 def test_search_api_maps_embedding_failure_to_502(

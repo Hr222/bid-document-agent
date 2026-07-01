@@ -28,6 +28,7 @@ class PolicyPipelineResponse(BaseModel):
     stages: list[PipelineStageResult] = Field(default_factory=list, description="阶段执行记录。")
     policy_name_guess: str | None = Field(default=None, description="猜测的制度名称。")
     derived_version_label: str | None = Field(default=None, description="推导出的版本标签。")
+    target_document_id: int | None = Field(default=None, description="显式指定的制度主档 ID。")
     registered_file: RegisteredFileInfo | None = Field(default=None, description="文件登记结果。")
     validation: IntakeValidationResult | None = Field(default=None, description="准入校验结果。")
     normalization: FormatNormalizationResult | None = Field(default=None, description="格式归一化结果。")

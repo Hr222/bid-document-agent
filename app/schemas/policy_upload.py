@@ -10,6 +10,11 @@ class PolicyUploadIngestRequest(BaseModel):
     policy_category: str = Field(default="管理制度", min_length=1, description="资料分类。")
     responsible_department: str | None = Field(default=None, description="责任部门。")
     version_label: str | None = Field(default=None, description="手工指定的版本标签。")
+    target_document_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="显式指定要挂接的已有制度主档 ID。",
+    )
 
 
 class PolicyUploadPreviewResponse(PolicyPipelineResponse):

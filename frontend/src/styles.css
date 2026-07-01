@@ -18,7 +18,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -129,6 +130,16 @@ textarea {
 }
 
 .field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+}
+
+.select-field {
   width: 100%;
   min-height: 42px;
   padding: 10px 12px;
