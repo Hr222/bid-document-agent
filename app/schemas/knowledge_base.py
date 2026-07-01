@@ -19,3 +19,20 @@ class RagMvpStatus(BaseModel):
     backend_goal: str = Field(description="后端当前目标。")
     frontend_goal: str = Field(description="前端当前目标。")
     evaluation_goal: str = Field(description="验收或评估目标。")
+
+
+class PolicyDocumentOption(BaseModel):
+    """前端选择已有制度时使用的下拉项。"""
+
+    document_id: int = Field(description="制度主档 ID。")
+    policy_name: str = Field(description="制度名称。")
+    policy_category: str = Field(description="制度分类。")
+    responsible_department: str | None = Field(default=None, description="责任部门。")
+    latest_version_id: int | None = Field(default=None, description="最新版本 ID。")
+    latest_version_label: str | None = Field(default=None, description="最新版本标签。")
+
+
+class PolicyDocumentOptionList(BaseModel):
+    """制度下拉列表响应。"""
+
+    items: list[PolicyDocumentOption] = Field(default_factory=list)

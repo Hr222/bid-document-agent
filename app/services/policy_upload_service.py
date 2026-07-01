@@ -7,6 +7,11 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
+SUPPORTED_UPLOAD_EXTENSIONS = {".docx", ".pdf"}
+UNSUPPORTED_UPLOAD_MESSAGE = (
+    "当前仅支持 .docx / .pdf 文件，请先将 .doc 转换为 .docx 后再上传。"
+)
+
 
 @dataclass(slots=True)
 class StagedUpload:
@@ -28,6 +33,10 @@ class PolicyUploadService:
         file_name = Path(upload.filename or "").name
         if not file_name:
             raise ValueError("上传文件必须包含文件名。")
+
+        extension = Path(file_name).suffix.lower()
+        if extension not in SUPPORTED_UPLOAD_EXTENSIONS:
+            raise ValueError(UNSUPPORTED_UPLOAD_MESSAGE)
 
         upload_id = uuid.uuid4().hex
         target_dir = self.upload_root / upload_id

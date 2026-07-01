@@ -22,6 +22,20 @@ def _upload_service() -> PolicyUploadService:
     return PolicyUploadService(Path(settings.policy_pipeline_workspace))
 
 
+def _validate_target_document_id(
+    repository: PolicyRepository,
+    target_document_id: int | None,
+) -> None:
+    if target_document_id is None:
+        return
+    if repository.document_exists(target_document_id):
+        return
+    raise HTTPException(
+        status_code=400,
+        detail="指定的已有关联制度不存在，可能是数据库已重建或记录已被删除，请重新选择后再试。",
+    )
+
+
 @router.post("/policy-pipeline/preview", response_model=PolicyPipelineResponse)
 async def preview_policy_pipeline(request: PolicyPipelineRequest) -> PolicyPipelineResponse:
     """执行预览流水线，不写入数据库。"""
@@ -38,7 +52,9 @@ async def ingest_policy_pipeline(
     session: Session = Depends(get_db_session),
 ) -> PolicyPipelineResponse:
     """执行完整流水线，并写入制度文档、版本、章节和切块。"""
-    service = PolicyPipelineService(repository=PolicyRepository(session))
+    repository = PolicyRepository(session)
+    _validate_target_document_id(repository, request.target_document_id)
+    service = PolicyPipelineService(repository=repository)
     try:
         return service.ingest(request)
     except ProgrammingError as exc:
@@ -66,6 +82,7 @@ async def preview_policy_pipeline_upload(
                 policy_category=policy_category,
                 responsible_department=responsible_department,
                 version_label=version_label,
+                target_document_id=None,
             )
         )
         return PolicyUploadPreviewResponse(**response.model_dump(), upload_id=staged.upload_id)
@@ -81,7 +98,9 @@ async def ingest_policy_pipeline_upload(
     session: Session = Depends(get_db_session),
 ) -> PolicyPipelineResponse:
     upload_service = _upload_service()
-    service = PolicyPipelineService(repository=PolicyRepository(session))
+    repository = PolicyRepository(session)
+    _validate_target_document_id(repository, request.target_document_id)
+    service = PolicyPipelineService(repository=repository)
     try:
         source_path = upload_service.resolve_upload(request.upload_id)
         return service.ingest(
@@ -90,6 +109,7 @@ async def ingest_policy_pipeline_upload(
                 policy_category=request.policy_category,
                 responsible_department=request.responsible_department,
                 version_label=request.version_label,
+                target_document_id=request.target_document_id,
             )
         )
     except ProgrammingError as exc:

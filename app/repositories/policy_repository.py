@@ -48,11 +48,24 @@ class RetrievedPolicyChunk:
     score: float
 
 
+@dataclass(slots=True)
+class PolicyDocumentListItem:
+    document_id: int
+    policy_name: str
+    policy_category: str
+    responsible_department: str | None
+    latest_version_id: int | None
+    latest_version_label: str | None
+
+
 class PolicyRepository:
     """制度知识库落库仓储。"""
 
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def document_exists(self, document_id: int) -> bool:
+        return self.session.get(PolicyDocument, document_id) is not None
 
     def save_document_version_blocks_sections_and_chunks(
         self,
@@ -60,6 +73,7 @@ class PolicyRepository:
         policy_name: str,
         policy_category: str,
         responsible_department: str | None,
+        target_document_id: int | None,
         registered_file: RegisteredFileInfo,
         version_label: str,
         parse_method: str,
@@ -74,6 +88,7 @@ class PolicyRepository:
         """在一个事务里保存 document、version、block、section、chunk。"""
         try:
             document = self._get_or_create_document(
+                target_document_id=target_document_id,
                 policy_name=policy_name,
                 policy_category=policy_category,
                 responsible_department=responsible_department,
@@ -112,6 +127,45 @@ class PolicyRepository:
         except Exception:
             self.session.rollback()
             raise
+
+    def list_documents(
+        self,
+        *,
+        search: str | None = None,
+        policy_category: str | None = None,
+        limit: int = 50,
+    ) -> list[PolicyDocumentListItem]:
+        statement = (
+            select(
+                PolicyDocument.id.label("document_id"),
+                PolicyDocument.policy_name.label("policy_name"),
+                PolicyDocument.policy_category.label("policy_category"),
+                PolicyDocument.responsible_department.label("responsible_department"),
+                PolicyDocument.latest_version_id.label("latest_version_id"),
+                PolicyVersion.version_label.label("latest_version_label"),
+            )
+            .outerjoin(PolicyVersion, PolicyVersion.id == PolicyDocument.latest_version_id)
+            .order_by(PolicyDocument.updated_at.desc(), PolicyDocument.id.desc())
+            .limit(limit)
+        )
+
+        if policy_category:
+            statement = statement.where(PolicyDocument.policy_category == policy_category)
+        if search and search.strip():
+            statement = statement.where(PolicyDocument.policy_name.ilike(f"%{search.strip()}%"))
+
+        rows = self.session.execute(statement).all()
+        return [
+            PolicyDocumentListItem(
+                document_id=row.document_id,
+                policy_name=row.policy_name,
+                policy_category=row.policy_category,
+                responsible_department=row.responsible_department,
+                latest_version_id=row.latest_version_id,
+                latest_version_label=row.latest_version_label,
+            )
+            for row in rows
+        ]
 
     def search_chunks(
         self,
@@ -184,10 +238,17 @@ class PolicyRepository:
     def _get_or_create_document(
         self,
         *,
+        target_document_id: int | None,
         policy_name: str,
         policy_category: str,
         responsible_department: str | None,
     ) -> PolicyDocument:
+        if target_document_id is not None:
+            document = self.session.get(PolicyDocument, target_document_id)
+            if document is None:
+                raise ValueError(f"指定的制度主档不存在：{target_document_id}")
+            return document
+
         statement = (
             select(PolicyDocument)
             .where(PolicyDocument.policy_name == policy_name)

@@ -1,5 +1,6 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { listPolicyDocuments } from "./api/knowledgeBase";
 import { askKnowledgeBase, searchKnowledgeBase } from "./api/knowledgeRetrieval";
 import { ingestUpload, previewUpload } from "./api/policyPipeline";
 import { RetrievalForm } from "./components/RetrievalForm";
@@ -7,10 +8,14 @@ import { RetrievalResultPanel } from "./components/RetrievalResultPanel";
 import { ResultPanel } from "./components/ResultPanel";
 import { UploadForm } from "./components/UploadForm";
 import { UI_TEXT } from "./constants/uiText";
+import type { PolicyDocumentOption } from "./types/knowledgeBase";
 import type { PipelineResponse, PreviewUploadResponse } from "./types/pipeline";
 import type { RagAskResponse, RetrievalSearchResponse } from "./types/retrieval";
 
 type WorkspaceMode = "ingestion" | "retrieval";
+const SUPPORTED_UPLOAD_EXTENSIONS = new Set(["docx", "pdf"]);
+const STALE_TARGET_DOCUMENT_MESSAGE =
+  "你之前选择的关联制度已经不存在了，可能是数据库已重建。我已经帮你清空这个选择，请重新选择后再试。";
 
 export default function App() {
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("ingestion");
@@ -25,6 +30,9 @@ export default function App() {
   const [ingestResult, setIngestResult] = useState<PipelineResponse | null>(null);
   const [loadingAction, setLoadingAction] = useState<"preview" | "ingest" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [documentOptions, setDocumentOptions] = useState<PolicyDocumentOption[]>([]);
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [selectedTargetDocument, setSelectedTargetDocument] = useState<PolicyDocumentOption | null>(null);
 
   const [query, setQuery] = useState("");
   const [retrievalTopK, setRetrievalTopK] = useState(5);
@@ -39,19 +47,69 @@ export default function App() {
   const [searchResult, setSearchResult] = useState<RetrievalSearchResponse | null>(null);
   const [answerResult, setAnswerResult] = useState<RagAskResponse | null>(null);
 
+  const previewPassedValidation = Boolean(previewResult?.validation?.is_allowed);
+  const ingestSucceeded = Boolean(ingestResult?.persistence?.persisted);
   const canPreview = Boolean(selectedFile) && loadingAction === null;
-  const canIngest = Boolean(previewResult?.upload_id) && loadingAction === null;
+  const canIngest =
+    Boolean(previewResult?.upload_id) &&
+    previewPassedValidation &&
+    !ingestSucceeded &&
+    loadingAction === null;
 
   const currentResult = useMemo(
     () => ingestResult ?? previewResult,
     [ingestResult, previewResult],
   );
 
+  useEffect(() => {
+    void refreshDocumentOptions("");
+  }, []);
+
+  async function refreshDocumentOptions(search = documentSearch) {
+    try {
+      const payload = await listPolicyDocuments({
+        search,
+        limit: 50,
+      });
+      setDocumentOptions(payload.items);
+      if (
+        selectedTargetDocument &&
+        !payload.items.some((item) => item.document_id === selectedTargetDocument.document_id)
+      ) {
+        setSelectedTargetDocument(null);
+        setErrorMessage(STALE_TARGET_DOCUMENT_MESSAGE);
+      }
+    } catch {
+      // Keep the current upload flow usable even if the options list fails to load.
+    }
+  }
+
   function handleFileSelect(file: File | null) {
+    if (file) {
+      const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) {
+        setSelectedFile(null);
+        setPreviewResult(null);
+        setIngestResult(null);
+        setErrorMessage(UI_TEXT.unsupportedFileType);
+        return;
+      }
+    }
+
     setSelectedFile(file);
     setPreviewResult(null);
     setIngestResult(null);
     setErrorMessage(null);
+  }
+
+  function handleDocumentSearchChange(value: string) {
+    setDocumentSearch(value);
+    void refreshDocumentOptions(value);
+  }
+
+  function handleTargetDocumentChange(documentId: string) {
+    const next = documentOptions.find((item) => String(item.document_id) === documentId) ?? null;
+    setSelectedTargetDocument(next);
   }
 
   async function handlePreview(event: FormEvent<HTMLFormElement>) {
@@ -87,6 +145,10 @@ export default function App() {
       setErrorMessage(UI_TEXT.previewFirst);
       return;
     }
+    if (!previewPassedValidation) {
+      setErrorMessage(UI_TEXT.previewValidationFailed);
+      return;
+    }
 
     setLoadingAction("ingest");
     setErrorMessage(null);
@@ -98,10 +160,20 @@ export default function App() {
         policyCategory,
         responsibleDepartment,
         versionLabel,
+        targetDocumentId: selectedTargetDocument?.document_id ?? null,
       });
       setIngestResult(payload);
+      void refreshDocumentOptions();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : UI_TEXT.ingestFailed);
+      const message = error instanceof Error ? error.message : UI_TEXT.ingestFailed;
+      if (message.includes("指定的已有关联制度不存在")) {
+        setSelectedTargetDocument(null);
+        setDocumentSearch("");
+        void refreshDocumentOptions("");
+        setErrorMessage(STALE_TARGET_DOCUMENT_MESSAGE);
+        return;
+      }
+      setErrorMessage(message);
     } finally {
       setLoadingAction(null);
     }
@@ -197,6 +269,9 @@ export default function App() {
             policyCategory={policyCategory}
             responsibleDepartment={responsibleDepartment}
             versionLabel={versionLabel}
+            documentSearch={documentSearch}
+            documentOptions={documentOptions}
+            selectedTargetDocumentId={selectedTargetDocument ? String(selectedTargetDocument.document_id) : ""}
             loadingAction={loadingAction}
             canPreview={canPreview}
             canIngest={canIngest}
@@ -205,6 +280,8 @@ export default function App() {
             onPolicyCategoryChange={setPolicyCategory}
             onResponsibleDepartmentChange={setResponsibleDepartment}
             onVersionLabelChange={setVersionLabel}
+            onDocumentSearchChange={handleDocumentSearchChange}
+            onTargetDocumentChange={handleTargetDocumentChange}
             onPreview={handlePreview}
             onIngest={handleIngest}
           />

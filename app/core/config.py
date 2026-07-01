@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     ocr_request_interval_seconds: float = 10.0
     retrieval_top_k_default: int = 5
     retrieval_top_k_max: int = 20
+    retrieval_min_score: float = 0.45
     rag_answer_top_k: int = 6
     rag_max_context_chars_per_chunk: int = 500
     ocr_enabled: bool = True

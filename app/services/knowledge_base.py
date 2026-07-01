@@ -1,8 +1,16 @@
-from app.schemas.knowledge_base import KnowledgeBaseOverview, RagMvpStatus
+from sqlalchemy.orm import Session
+
+from app.repositories.policy_repository import PolicyRepository
+from app.schemas.knowledge_base import (
+    KnowledgeBaseOverview,
+    PolicyDocumentOption,
+    PolicyDocumentOptionList,
+    RagMvpStatus,
+)
 
 
 class KnowledgeBaseService:
-    """知识库概览服务，用于返回项目阶段信息，不参与制度入库主流水线。"""
+    """知识库概览与轻量管理服务。"""
 
     def get_overview(self) -> KnowledgeBaseOverview:
         return KnowledgeBaseOverview(
@@ -26,4 +34,32 @@ class KnowledgeBaseService:
             backend_goal="打通入库、切块、检索、回答整条链路。",
             frontend_goal="提供文档列表、详情、检索调试和问答界面。",
             evaluation_goal="准备一套小规模检索相关性基准集。",
+        )
+
+    def list_documents(
+        self,
+        session: Session,
+        *,
+        search: str | None = None,
+        policy_category: str | None = None,
+        limit: int = 50,
+    ) -> PolicyDocumentOptionList:
+        repository = PolicyRepository(session)
+        items = repository.list_documents(
+            search=search,
+            policy_category=policy_category,
+            limit=limit,
+        )
+        return PolicyDocumentOptionList(
+            items=[
+                PolicyDocumentOption(
+                    document_id=item.document_id,
+                    policy_name=item.policy_name,
+                    policy_category=item.policy_category,
+                    responsible_department=item.responsible_department,
+                    latest_version_id=item.latest_version_id,
+                    latest_version_label=item.latest_version_label,
+                )
+                for item in items
+            ]
         )

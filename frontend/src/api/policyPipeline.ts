@@ -48,6 +48,7 @@ export async function ingestUpload(payload: {
   policyCategory: string;
   responsibleDepartment: string;
   versionLabel: string;
+  targetDocumentId?: number | null;
 }): Promise<PipelineResponse> {
   const response = await fetch(`${API_BASE}/ingest-upload`, {
     method: "POST",
@@ -59,6 +60,7 @@ export async function ingestUpload(payload: {
       policy_category: payload.policyCategory,
       responsible_department: payload.responsibleDepartment || null,
       version_label: payload.versionLabel.trim() || null,
+      target_document_id: payload.targetDocumentId ?? null,
     }),
   });
 

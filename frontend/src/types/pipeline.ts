@@ -27,6 +27,14 @@ export type PipelineResponse = {
   stages: PipelineStage[];
   policy_name_guess: string | null;
   derived_version_label: string | null;
+  target_document_id?: number | null;
+  validation?: {
+    is_allowed: boolean;
+    detected_file_kind: string;
+    needs_normalization: boolean;
+    recommended_parse_method: string;
+    warnings: string[];
+  } | null;
   parsed_text?: {
     parser_status: string;
     parse_method: "direct" | "ocr" | "mixed";

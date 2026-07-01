@@ -48,6 +48,7 @@ class PolicyPersistenceService:
             policy_name=policy_name,
             policy_category=context.request.policy_category,
             responsible_department=context.request.responsible_department,
+            target_document_id=context.request.target_document_id,
             registered_file=registered_file,
             version_label=version_label,
             parse_method=parsed_text.parse_method,

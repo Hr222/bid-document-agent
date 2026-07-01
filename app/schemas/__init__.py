@@ -58,6 +58,12 @@ from app.schemas.retrieval import (
     RetrievalSearchRequest,
     RetrievalSearchResponse,
 )
+from app.schemas.knowledge_base import (
+    KnowledgeBaseOverview,
+    PolicyDocumentOption,
+    PolicyDocumentOptionList,
+    RagMvpStatus,
+)
 
 __all__ = [
     "PipelineStageName",
@@ -93,4 +99,8 @@ __all__ = [
     "RagAskRequest",
     "AnswerCitation",
     "RagAskResponse",
+    "KnowledgeBaseOverview",
+    "RagMvpStatus",
+    "PolicyDocumentOption",
+    "PolicyDocumentOptionList",
 ]

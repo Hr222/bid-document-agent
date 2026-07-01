@@ -47,6 +47,7 @@ class PipelineContext:
         self.response = PolicyPipelineResponse(
             mode=self.mode,
             source_path=self.request.source_path,
+            target_document_id=self.request.target_document_id,
             stages=[],
         )
 
