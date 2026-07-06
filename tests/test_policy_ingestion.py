@@ -1,14 +1,12 @@
-import uuid
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import get_db_session
 from app.core.config import settings
-from app.db.base import Base
+from app.domain.policy import PolicyChunkingPolicy
 from app.main import app
 from app.models import PolicyBlock, PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
 from app.schemas import (
@@ -22,7 +20,7 @@ from app.services.step.policy_chunking import PolicyChunkingService
 from app.services.step.policy_embedding import PolicyEmbeddingService
 from app.services.step.policy_ocr import PolicyOcrService
 from app.services.step.policy_parser import PolicyParserService
-from app.domain.policy import PolicyChunkingPolicy
+from tests.db_test_utils import SchemaHarness
 
 
 def _create_docx(path: Path, paragraphs: list[str]) -> None:
@@ -63,25 +61,10 @@ def _build_pdf_document_result(
     )
 
 
-TEST_SCHEMA = f"test_policy_ingestion_{uuid.uuid4().hex[:8]}"
-TEST_ENGINE = create_engine(
-    settings.database_url,
-    future=True,
-    pool_pre_ping=True,
-    connect_args={"options": f"-csearch_path={TEST_SCHEMA},public"},
-)
-TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit=False)
-
-with TEST_ENGINE.begin() as conn:
-    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}"))
-    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_block CASCADE'))
-    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_chunk CASCADE'))
-    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_section CASCADE'))
-    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_version CASCADE'))
-    conn.execute(text(f'DROP TABLE IF EXISTS "{TEST_SCHEMA}".kb_policy_document CASCADE'))
-
-Base.metadata.create_all(bind=TEST_ENGINE, checkfirst=False)
+TEST_DB = SchemaHarness("test_policy_ingestion")
+TEST_SCHEMA = TEST_DB.schema
+TestingSessionLocal = TEST_DB.session_local
+client: TestClient
 
 
 @pytest.fixture(autouse=True)
@@ -93,18 +76,23 @@ def _reset_tables() -> None:
 def _fake_embedding_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_embeddings(monkeypatch)
 
+@pytest.fixture(scope="module", autouse=True)
+def _test_schema_lifecycle() -> Iterator[None]:
+    global client
 
-
-def override_get_db_session():
-    session = TestingSessionLocal()
+    previous_override = app.dependency_overrides.get(get_db_session)
+    TEST_DB.create_schema()
+    app.dependency_overrides[get_db_session] = TEST_DB.override_get_db_session
     try:
-        yield session
+        with TestClient(app) as test_client:
+            client = test_client
+            yield
     finally:
-        session.close()
-
-
-app.dependency_overrides[get_db_session] = override_get_db_session
-client = TestClient(app)
+        if previous_override is None:
+            app.dependency_overrides.pop(get_db_session, None)
+        else:
+            app.dependency_overrides[get_db_session] = previous_override
+        TEST_DB.drop_schema()
 
 
 
@@ -135,16 +123,13 @@ def _install_fake_embeddings(
 
 
 def _truncate_tables() -> None:
-    with TEST_ENGINE.begin() as conn:
-        conn.execute(
-            text(
-                f'TRUNCATE TABLE "{TEST_SCHEMA}".kb_policy_block, '
-                f'"{TEST_SCHEMA}".kb_policy_chunk, '
-                f'"{TEST_SCHEMA}".kb_policy_section, '
-                f'"{TEST_SCHEMA}".kb_policy_version, '
-                f'"{TEST_SCHEMA}".kb_policy_document RESTART IDENTITY CASCADE'
-            )
-        )
+    TEST_DB.truncate_tables(
+        "kb_policy_block",
+        "kb_policy_chunk",
+        "kb_policy_section",
+        "kb_policy_version",
+        "kb_policy_document",
+    )
 
 
 

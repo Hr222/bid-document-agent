@@ -21,6 +21,11 @@ from app.services.retrieval_service import KnowledgeRetrievalService
 router = APIRouter()
 
 
+def _is_insufficient_evidence_answer(answer: str) -> bool:
+    normalized = answer.strip()
+    return normalized == INSUFFICIENT_EVIDENCE_ANSWER or "足够依据" in normalized
+
+
 @router.post("/retrieval/search", response_model=RetrievalSearchResponse)
 async def search_knowledge_base(
     request: RetrievalSearchRequest,
@@ -67,7 +72,10 @@ async def ask_knowledge_base(
             )
 
         answer_service = RagAnswerService()
-        return answer_service.answer(query=request.query, hits=search_response.hits)
+        answer_response = answer_service.answer(query=request.query, hits=search_response.hits)
+        if _is_insufficient_evidence_answer(answer_response.answer):
+            return answer_response.model_copy(update={"citations": [], "hits": []})
+        return answer_response
     except ProgrammingError as exc:
         if is_missing_kb_schema_error(exc):
             raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
