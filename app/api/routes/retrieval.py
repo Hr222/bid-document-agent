@@ -69,13 +69,16 @@ async def ask_knowledge_base(
                 model=None,
                 citations=[],
                 hits=[],
+                debug=search_response.debug,
             )
 
         answer_service = RagAnswerService()
         answer_response = answer_service.answer(query=request.query, hits=search_response.hits)
         if _is_insufficient_evidence_answer(answer_response.answer):
-            return answer_response.model_copy(update={"citations": [], "hits": []})
-        return answer_response
+            return answer_response.model_copy(
+                update={"citations": [], "hits": [], "debug": search_response.debug}
+            )
+        return answer_response.model_copy(update={"debug": search_response.debug})
     except ProgrammingError as exc:
         if is_missing_kb_schema_error(exc):
             raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc

@@ -319,6 +319,9 @@ def test_search_api_returns_empty_hits_for_empty_library(
     payload = response.json()
     assert payload["query"] == "没有任何数据时的检索"
     assert payload["hits"] == []
+    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v1"
+    assert payload["debug"]["strategy"] == "vector-only-exact"
+    assert payload["debug"]["stages"][-1]["output_count"] == 0
 
 
 def test_search_api_returns_rank_score_and_metadata(
@@ -375,6 +378,14 @@ def test_search_api_returns_rank_score_and_metadata(
     assert payload["hits"][0]["section_title"] == "审批流程"
     assert payload["hits"][0]["page_no"] == 6
     assert payload["hits"][0]["score"] >= payload["hits"][1]["score"]
+    assert payload["hits"][0]["retrieval_source"] == "vector"
+    assert payload["hits"][0]["score_breakdown"]["vector"] == payload["hits"][0]["score"]
+    assert payload["debug"]["min_score"] == settings.retrieval_min_score
+    assert [stage["name"] for stage in payload["debug"]["stages"]] == [
+        "query_embedding",
+        "vector_recall",
+        "score_filter",
+    ]
 
 
 def test_search_api_filters_low_score_hits_as_no_result(
@@ -408,6 +419,8 @@ def test_search_api_filters_low_score_hits_as_no_result(
     assert response.status_code == 200
     payload = response.json()
     assert payload["hits"] == []
+    assert payload["debug"]["stages"][-1]["input_count"] == 1
+    assert payload["debug"]["stages"][-1]["output_count"] == 0
 
 
 def test_search_api_maps_embedding_failure_to_502(
@@ -516,6 +529,8 @@ def test_ask_api_uses_retrieval_hits_and_returns_answer(
     assert payload["model"] == "glm-test"
     assert payload["citations"][0]["ref_no"] == 1
     assert payload["hits"][0]["policy_name"] == "采购管理制度"
+    assert payload["hits"][0]["retrieval_source"] == "vector"
+    assert payload["debug"]["strategy"] == "vector-only-exact"
 
 
 def test_ask_api_hides_hits_and_citations_when_glm_returns_insufficient_evidence(
@@ -577,6 +592,8 @@ def test_ask_api_hides_hits_and_citations_when_glm_returns_insufficient_evidence
     assert payload["answer"] == "未在知识库中找到足够依据。"
     assert payload["citations"] == []
     assert payload["hits"] == []
+    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v1"
+    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v1"
 
 
 def test_ask_api_maps_glm_failure_to_502(

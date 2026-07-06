@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from app.core.config import settings
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas import (
+    RetrievalDebugInfo,
     RetrievalFilters,
     RetrievalHit,
+    RetrievalStageDebug,
     RetrievalSearchRequest,
     RetrievalSearchResponse,
 )
-from app.services.step.policy_embedding import PolicyEmbeddingService
+from app.services.retrieval_pipeline import ExactVectorRetrievalPipeline
 
 
 class KnowledgeRetrievalService:
@@ -17,24 +18,13 @@ class KnowledgeRetrievalService:
     def __init__(
         self,
         repository: PolicyRepository,
-        embedding_service: PolicyEmbeddingService | None = None,
+        pipeline: ExactVectorRetrievalPipeline | None = None,
     ) -> None:
         self.repository = repository
-        self.embedding_service = embedding_service or PolicyEmbeddingService()
+        self.pipeline = pipeline or ExactVectorRetrievalPipeline(repository)
 
     def search(self, request: RetrievalSearchRequest) -> RetrievalSearchResponse:
-        query_embedding = self.embedding_service.embed_query(request.query)
-        matches = self.repository.search_chunks(
-            query_embedding=query_embedding,
-            top_k=request.top_k,
-            policy_category=request.policy_category,
-            responsible_department=request.responsible_department,
-            document_id=request.document_id,
-            include_history=request.include_history,
-        )
-        matches = [
-            item for item in matches if item.score >= settings.retrieval_min_score
-        ]
+        pipeline_result = self.pipeline.run(request)
 
         hits = [
             RetrievalHit(
@@ -51,8 +41,10 @@ class KnowledgeRetrievalService:
                 chunk_text=item.chunk_text,
                 score=round(item.score, 6),
                 rank=index,
+                retrieval_source="vector",
+                score_breakdown={"vector": round(item.score, 6)},
             )
-            for index, item in enumerate(matches, start=1)
+            for index, item in enumerate(pipeline_result.hits, start=1)
         ]
 
         return RetrievalSearchResponse(
@@ -65,4 +57,19 @@ class KnowledgeRetrievalService:
                 include_history=request.include_history,
             ),
             hits=hits,
+            debug=RetrievalDebugInfo(
+                pipeline=pipeline_result.pipeline,
+                strategy=pipeline_result.strategy,
+                min_score=pipeline_result.min_score,
+                stages=[
+                    RetrievalStageDebug(
+                        name=trace.name,
+                        source=trace.source,
+                        input_count=trace.input_count,
+                        output_count=trace.output_count,
+                        details=trace.details,
+                    )
+                    for trace in pipeline_result.traces
+                ],
+            ),
         )

@@ -12,6 +12,23 @@ export type RetrievalHit = {
   chunk_text: string;
   score: number;
   rank: number;
+  retrieval_source: string;
+  score_breakdown: Record<string, number>;
+};
+
+export type RetrievalStageDebug = {
+  name: string;
+  source: string | null;
+  input_count: number | null;
+  output_count: number | null;
+  details: Record<string, string | number | boolean | null>;
+};
+
+export type RetrievalDebugInfo = {
+  pipeline: string;
+  strategy: string;
+  min_score: number;
+  stages: RetrievalStageDebug[];
 };
 
 export type RetrievalSearchRequest = {
@@ -33,6 +50,7 @@ export type RetrievalSearchResponse = {
     include_history: boolean;
   };
   hits: RetrievalHit[];
+  debug: RetrievalDebugInfo;
 };
 
 export type AnswerCitation = {
@@ -54,4 +72,5 @@ export type RagAskResponse = {
   model: string | null;
   citations: AnswerCitation[];
   hits: RetrievalHit[];
+  debug: RetrievalDebugInfo | null;
 };

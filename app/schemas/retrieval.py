@@ -40,6 +40,26 @@ class RetrievalHit(BaseModel):
     chunk_text: str
     score: float
     rank: int
+    retrieval_source: str = Field(description="命中结果来源，例如 vector / keyword / hybrid。")
+    score_breakdown: dict[str, float] = Field(
+        default_factory=dict,
+        description="各阶段分数拆解，便于调试融合与重排效果。",
+    )
+
+
+class RetrievalStageDebug(BaseModel):
+    name: str
+    source: str | None = None
+    input_count: int | None = None
+    output_count: int | None = None
+    details: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class RetrievalDebugInfo(BaseModel):
+    pipeline: str
+    strategy: str
+    min_score: float
+    stages: list[RetrievalStageDebug]
 
 
 class RetrievalSearchResponse(BaseModel):
@@ -47,6 +67,7 @@ class RetrievalSearchResponse(BaseModel):
     top_k: int
     filters: RetrievalFilters
     hits: list[RetrievalHit]
+    debug: RetrievalDebugInfo
 
 
 class RagAskRequest(BaseModel):
@@ -80,3 +101,4 @@ class RagAskResponse(BaseModel):
     model: str | None
     citations: list[AnswerCitation]
     hits: list[RetrievalHit]
+    debug: RetrievalDebugInfo | None = None
