@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -34,6 +34,8 @@ class PersistedPolicyRecords:
 
 @dataclass(slots=True)
 class RetrievedPolicyChunk:
+    """检索命中结果的最小仓储对象，保留来源与分数拆解供上层融合。"""
+
     document_id: int
     version_id: int
     chunk_id: int
@@ -46,6 +48,12 @@ class RetrievedPolicyChunk:
     page_no: int | None
     chunk_text: str
     score: float
+    # 标记命中来自向量、关键词，或后续融合后的 hybrid。
+    retrieval_source: str = "vector"
+    # 保留各路分数，便于后续 debug 和结果解释。
+    score_breakdown: dict[str, float] = field(default_factory=dict)
+    # 额外保留调试细节，供 pipeline 汇总到 debug 阶段信息中。
+    debug_details: dict[str, str | int | float | bool | None] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -231,9 +239,240 @@ class PolicyRepository:
                     page_no=row.page_no,
                     chunk_text=row.chunk_text,
                     score=score,
+                    retrieval_source="vector",
+                    score_breakdown={"vector": score},
+                    debug_details={},
                 )
             )
         return results
+
+    def search_chunks_by_keywords(
+        self,
+        *,
+        focus_query: str | None,
+        keywords: list[str],
+        top_k: int,
+        policy_category: str | None = None,
+        responsible_department: str | None = None,
+        document_id: int | None = None,
+        include_history: bool = False,
+    ) -> list[RetrievedPolicyChunk]:
+        # 关键词召回先走最小可用版本：不引入 BM25，仅基于命中位置做轻量打分。
+        normalized_focus_query = (focus_query or "").strip().lower()
+        normalized_keywords = [keyword.strip().lower() for keyword in keywords if keyword.strip()]
+        if not normalized_focus_query and not normalized_keywords:
+            return []
+
+        # 同时检查正文、制度名、章节标题、章节路径，尽量覆盖条款类问法。
+        chunk_text_expr = func.lower(PolicyChunk.chunk_text)
+        policy_name_expr = func.lower(PolicyDocument.policy_name)
+        section_title_expr = func.lower(func.coalesce(PolicySection.section_title, ""))
+        section_path_expr = func.lower(func.coalesce(PolicySection.section_path, ""))
+
+        raw_score_expr = literal(0.0)
+
+        if normalized_focus_query:
+            raw_score_expr = raw_score_expr + case(
+                (chunk_text_expr.contains(normalized_focus_query), 0.42),
+                else_=0.0,
+            )
+            raw_score_expr = raw_score_expr + case(
+                (policy_name_expr.contains(normalized_focus_query), 0.25),
+                else_=0.0,
+            )
+            raw_score_expr = raw_score_expr + case(
+                (section_title_expr.contains(normalized_focus_query), 0.20),
+                else_=0.0,
+            )
+            raw_score_expr = raw_score_expr + case(
+                (section_path_expr.contains(normalized_focus_query), 0.15),
+                else_=0.0,
+            )
+
+        for keyword in normalized_keywords:
+            # 词越长通常语义越完整，因此给更高权重；短词只保留较弱加分，避免噪声过大。
+            keyword_weights = self._resolve_keyword_weights(keyword)
+
+            raw_score_expr = raw_score_expr + case(
+                (chunk_text_expr.contains(keyword), keyword_weights["chunk_text"]),
+                else_=0.0,
+            )
+            raw_score_expr = raw_score_expr + case(
+                (policy_name_expr.contains(keyword), keyword_weights["policy_name"]),
+                else_=0.0,
+            )
+            raw_score_expr = raw_score_expr + case(
+                (section_title_expr.contains(keyword), keyword_weights["section_title"]),
+                else_=0.0,
+            )
+            raw_score_expr = raw_score_expr + case(
+                (section_path_expr.contains(keyword), keyword_weights["section_path"]),
+                else_=0.0,
+            )
+
+        statement = (
+            select(
+                PolicyDocument.id.label("document_id"),
+                PolicyVersion.id.label("version_id"),
+                PolicyChunk.id.label("chunk_id"),
+                PolicyDocument.policy_name.label("policy_name"),
+                PolicyDocument.policy_category.label("policy_category"),
+                PolicyDocument.responsible_department.label("responsible_department"),
+                PolicyVersion.version_label.label("version_label"),
+                PolicySection.section_title.label("section_title"),
+                PolicySection.section_path.label("section_path"),
+                PolicyChunk.page_no.label("page_no"),
+                PolicyChunk.chunk_text.label("chunk_text"),
+                raw_score_expr.label("raw_score"),
+            )
+            .join(PolicyVersion, PolicyVersion.id == PolicyChunk.version_id)
+            .join(PolicyDocument, PolicyDocument.id == PolicyVersion.policy_id)
+            .outerjoin(PolicySection, PolicySection.id == PolicyChunk.section_id)
+            .where(PolicyVersion.version_status.in_(("draft", "approved", "active")))
+        )
+
+        if not include_history:
+            statement = statement.where(PolicyDocument.latest_version_id == PolicyVersion.id)
+        if policy_category:
+            statement = statement.where(PolicyDocument.policy_category == policy_category)
+        if responsible_department:
+            statement = statement.where(
+                PolicyDocument.responsible_department == responsible_department
+            )
+        if document_id is not None:
+            statement = statement.where(PolicyDocument.id == document_id)
+
+        # 只返回真正命中过关键词的切块，并按关键词分数稳定排序。
+        rows = self.session.execute(
+            statement.where(raw_score_expr > 0.0).order_by(raw_score_expr.desc(), PolicyChunk.id.asc()).limit(top_k)
+        ).all()
+
+        results: list[RetrievedPolicyChunk] = []
+        for row in rows:
+            score = min(1.0, float(row.raw_score))
+            debug_details = self._build_keyword_match_debug_details(
+                chunk_text=row.chunk_text,
+                policy_name=row.policy_name,
+                section_title=row.section_title,
+                section_path=row.section_path,
+                focus_query=normalized_focus_query,
+                keywords=normalized_keywords,
+            )
+            results.append(
+                RetrievedPolicyChunk(
+                    document_id=row.document_id,
+                    version_id=row.version_id,
+                    chunk_id=row.chunk_id,
+                    policy_name=row.policy_name,
+                    policy_category=row.policy_category,
+                    responsible_department=row.responsible_department,
+                    version_label=row.version_label,
+                    section_title=row.section_title,
+                    section_path=row.section_path,
+                    page_no=row.page_no,
+                    chunk_text=row.chunk_text,
+                    score=score,
+                    retrieval_source="keyword",
+                    score_breakdown={"keyword": score},
+                    debug_details=debug_details,
+                )
+            )
+        return results
+
+    def _build_keyword_match_debug_details(
+        self,
+        *,
+        chunk_text: str,
+        policy_name: str,
+        section_title: str | None,
+        section_path: str | None,
+        focus_query: str,
+        keywords: list[str],
+    ) -> dict[str, str | int | float | bool | None]:
+        lower_chunk_text = chunk_text.lower()
+        lower_policy_name = policy_name.lower()
+        lower_section_title = (section_title or "").lower()
+        lower_section_path = (section_path or "").lower()
+
+        matched_fields: list[str] = []
+        matched_keywords: list[str] = []
+        score_terms: list[str] = []
+
+        def append_field(field_name: str) -> None:
+            if field_name not in matched_fields:
+                matched_fields.append(field_name)
+
+        if focus_query:
+            if focus_query in lower_chunk_text:
+                append_field("chunk_text")
+                score_terms.append(f"focus@chunk_text=0.42")
+            if focus_query in lower_policy_name:
+                append_field("policy_name")
+                score_terms.append(f"focus@policy_name=0.25")
+            if focus_query in lower_section_title:
+                append_field("section_title")
+                score_terms.append(f"focus@section_title=0.20")
+            if focus_query in lower_section_path:
+                append_field("section_path")
+                score_terms.append(f"focus@section_path=0.15")
+
+        for keyword in keywords:
+            keyword_weights = self._resolve_keyword_weights(keyword)
+            keyword_matched = False
+            if keyword in lower_chunk_text:
+                append_field("chunk_text")
+                score_terms.append(
+                    f"{keyword}@chunk_text={keyword_weights['chunk_text']:.2f}"
+                )
+                keyword_matched = True
+            if keyword in lower_policy_name:
+                append_field("policy_name")
+                score_terms.append(
+                    f"{keyword}@policy_name={keyword_weights['policy_name']:.2f}"
+                )
+                keyword_matched = True
+            if keyword in lower_section_title:
+                append_field("section_title")
+                score_terms.append(
+                    f"{keyword}@section_title={keyword_weights['section_title']:.2f}"
+                )
+                keyword_matched = True
+            if keyword in lower_section_path:
+                append_field("section_path")
+                score_terms.append(
+                    f"{keyword}@section_path={keyword_weights['section_path']:.2f}"
+                )
+                keyword_matched = True
+            if keyword_matched and keyword not in matched_keywords:
+                matched_keywords.append(keyword)
+
+        return {
+            "matched_fields": ", ".join(matched_fields) or None,
+            "matched_keywords": ", ".join(matched_keywords[:8]) or None,
+            "keyword_score_terms": "; ".join(score_terms[:10]) or None,
+        }
+
+    def _resolve_keyword_weights(self, keyword: str) -> dict[str, float]:
+        if len(keyword) >= 4:
+            return {
+                "chunk_text": 0.28,
+                "policy_name": 0.18,
+                "section_title": 0.14,
+                "section_path": 0.10,
+            }
+        if len(keyword) == 3:
+            return {
+                "chunk_text": 0.22,
+                "policy_name": 0.14,
+                "section_title": 0.12,
+                "section_path": 0.08,
+            }
+        return {
+            "chunk_text": 0.16,
+            "policy_name": 0.10,
+            "section_title": 0.08,
+            "section_path": 0.06,
+        }
 
     def _get_or_create_document(
         self,

@@ -27,6 +27,8 @@ class RetrievalFilters(BaseModel):
 
 
 class RetrievalHit(BaseModel):
+    """单条检索命中结果，包含展示字段和调试字段。"""
+
     document_id: int
     version_id: int
     chunk_id: int
@@ -48,6 +50,8 @@ class RetrievalHit(BaseModel):
 
 
 class RetrievalStageDebug(BaseModel):
+    """单个检索阶段的调试快照。"""
+
     name: str
     source: str | None = None
     input_count: int | None = None
@@ -56,6 +60,8 @@ class RetrievalStageDebug(BaseModel):
 
 
 class RetrievalDebugInfo(BaseModel):
+    """完整检索链路的调试信息。"""
+
     pipeline: str
     strategy: str
     min_score: float
@@ -63,6 +69,8 @@ class RetrievalDebugInfo(BaseModel):
 
 
 class RetrievalSearchResponse(BaseModel):
+    """search 接口响应，返回命中结果与检索调试信息。"""
+
     query: str
     top_k: int
     filters: RetrievalFilters
@@ -85,6 +93,8 @@ class RagAskRequest(BaseModel):
 
 
 class AnswerCitation(BaseModel):
+    """问答结果中的单条引用。"""
+
     ref_no: int
     document_id: int
     version_id: int
@@ -96,6 +106,8 @@ class AnswerCitation(BaseModel):
 
 
 class RagAskResponse(BaseModel):
+    """ask 接口响应，返回答案、引用、命中结果与可选调试信息。"""
+
     query: str
     answer: str
     model: str | None

@@ -10,7 +10,9 @@ from app.domain.policy.rules import (
     PolicyIdentityPolicy,
     PolicyIntakeDecision,
     PolicyIntakePolicy,
+    PolicyRetrievalQueryPolicy,
     PolicySectionStructurePolicy,
+    RetrievalKeywordPlan,
 )
 
 __all__ = [
@@ -18,5 +20,7 @@ __all__ = [
     "PolicyIdentityPolicy",
     "PolicyIntakeDecision",
     "PolicyIntakePolicy",
+    "PolicyRetrievalQueryPolicy",
     "PolicySectionStructurePolicy",
+    "RetrievalKeywordPlan",
 ]

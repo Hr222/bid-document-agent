@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session
 from app.core.config import settings
+from app.domain.policy import PolicyRetrievalQueryPolicy
 from app.main import app
 from app.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
 from app.repositories.policy_repository import PolicyRepository
@@ -304,10 +305,76 @@ def test_repository_search_include_history_and_filters(db_session: Session) -> N
     assert hits[0].score >= hits[1].score
 
 
+def test_retrieval_query_policy_strips_question_phrases_and_noise_terms() -> None:
+    # 查询规则已经抽到领域层，后续即便继续写死，也要保证行为可回归验证。
+    policy = PolicyRetrievalQueryPolicy()
+
+    plan = policy.build_keyword_plan("员工试用期多久？")
+
+    assert plan.normalized_query == "员工试用期多久"
+    assert plan.focus_query == "员工试用期"
+    assert "员工试用期" in plan.keywords
+    assert "试用期" in plan.keywords
+    assert "多久" not in plan.keywords
+
+
+def test_repository_keyword_search_returns_ranked_hits(db_session: Session) -> None:
+    # 覆盖 Step B1：确认最小关键词召回能把试用期条款命中出来。
+    _create_policy_document(
+        db_session,
+        policy_name="人事管理制度",
+        policy_category="人事制度",
+        responsible_department="人力资源部",
+        versions=[
+            {
+                "version_label": "2025",
+                "section_title": "试用期",
+                "section_path": "第一章 / 试用期",
+                "chunk_text": "员工试用期为六个月，试用期内由直属主管辅导。",
+                "embedding": _vector(0.2, 0.8),
+                "page_no": 4,
+            }
+        ],
+    )
+    _create_policy_document(
+        db_session,
+        policy_name="宿舍管理制度",
+        policy_category="后勤制度",
+        responsible_department="行政部",
+        versions=[
+            {
+                "version_label": "2025",
+                "section_title": "住宿安排",
+                "section_path": "第二章 / 住宿安排",
+                "chunk_text": "宿舍申请须由行政部审批。",
+                "embedding": _vector(0.1, 0.9),
+                "page_no": 7,
+            }
+        ],
+    )
+    repository = PolicyRepository(db_session)
+
+    hits = repository.search_chunks_by_keywords(
+        focus_query="员工试用期",
+        keywords=["员工试用期", "试用期", "员工", "试用"],
+        top_k=5,
+    )
+
+    assert len(hits) == 1
+    assert hits[0].policy_name == "人事管理制度"
+    assert hits[0].section_title == "试用期"
+    assert hits[0].retrieval_source == "keyword"
+    assert hits[0].score_breakdown["keyword"] == hits[0].score
+    assert hits[0].score >= settings.retrieval_min_score
+    assert hits[0].debug_details["matched_fields"] == "chunk_text, section_title, section_path"
+    assert "试用期" in str(hits[0].debug_details["matched_keywords"])
+
+
 def test_search_api_returns_empty_hits_for_empty_library(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # 覆盖 Step B2/B3：空库时也要保留完整的双路调试阶段，方便前后端排查。
     _install_fake_query_embedding(monkeypatch)
 
     response = client.post(
@@ -319,8 +386,15 @@ def test_search_api_returns_empty_hits_for_empty_library(
     payload = response.json()
     assert payload["query"] == "没有任何数据时的检索"
     assert payload["hits"] == []
-    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v1"
-    assert payload["debug"]["strategy"] == "vector-only-exact"
+    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v2"
+    assert payload["debug"]["strategy"] == "hybrid-vector-keyword"
+    assert [stage["name"] for stage in payload["debug"]["stages"]] == [
+        "query_embedding",
+        "vector_recall",
+        "keyword_recall",
+        "result_fusion",
+        "score_filter",
+    ]
     assert payload["debug"]["stages"][-1]["output_count"] == 0
 
 
@@ -329,6 +403,7 @@ def test_search_api_returns_rank_score_and_metadata(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # 覆盖 Step B3：同一结果被双路同时命中时，应返回 hybrid 来源和分数拆解。
     _create_policy_document(
         db_session,
         policy_name="采购管理制度",
@@ -378,14 +453,19 @@ def test_search_api_returns_rank_score_and_metadata(
     assert payload["hits"][0]["section_title"] == "审批流程"
     assert payload["hits"][0]["page_no"] == 6
     assert payload["hits"][0]["score"] >= payload["hits"][1]["score"]
-    assert payload["hits"][0]["retrieval_source"] == "vector"
-    assert payload["hits"][0]["score_breakdown"]["vector"] == payload["hits"][0]["score"]
+    assert payload["hits"][0]["retrieval_source"] == "hybrid"
+    assert payload["hits"][0]["score_breakdown"]["vector"] > 0
+    assert payload["hits"][0]["score_breakdown"]["keyword"] > 0
     assert payload["debug"]["min_score"] == settings.retrieval_min_score
     assert [stage["name"] for stage in payload["debug"]["stages"]] == [
         "query_embedding",
         "vector_recall",
+        "keyword_recall",
+        "result_fusion",
         "score_filter",
     ]
+    assert "sample_hit_1" in payload["debug"]["stages"][2]["details"]
+    assert "keywords=" in payload["debug"]["stages"][2]["details"]["sample_hit_1"]
 
 
 def test_search_api_filters_low_score_hits_as_no_result(
@@ -469,6 +549,7 @@ def test_ask_api_uses_retrieval_hits_and_returns_answer(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # 覆盖 ask 复用同一 retrieval pipeline，避免 search/ask 两条链路跑偏。
     _create_policy_document(
         db_session,
         policy_name="采购管理制度",
@@ -529,8 +610,8 @@ def test_ask_api_uses_retrieval_hits_and_returns_answer(
     assert payload["model"] == "glm-test"
     assert payload["citations"][0]["ref_no"] == 1
     assert payload["hits"][0]["policy_name"] == "采购管理制度"
-    assert payload["hits"][0]["retrieval_source"] == "vector"
-    assert payload["debug"]["strategy"] == "vector-only-exact"
+    assert payload["hits"][0]["retrieval_source"] == "hybrid"
+    assert payload["debug"]["strategy"] == "hybrid-vector-keyword"
 
 
 def test_ask_api_hides_hits_and_citations_when_glm_returns_insufficient_evidence(
@@ -592,8 +673,8 @@ def test_ask_api_hides_hits_and_citations_when_glm_returns_insufficient_evidence
     assert payload["answer"] == "未在知识库中找到足够依据。"
     assert payload["citations"] == []
     assert payload["hits"] == []
-    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v1"
-    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v1"
+    assert payload["debug"]["pipeline"] == "knowledge-retrieval-v2"
+    assert payload["debug"]["strategy"] == "hybrid-vector-keyword"
 
 
 def test_ask_api_maps_glm_failure_to_502(

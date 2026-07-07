@@ -9,23 +9,24 @@ from app.schemas import (
     RetrievalSearchRequest,
     RetrievalSearchResponse,
 )
-from app.services.retrieval_pipeline import ExactVectorRetrievalPipeline
+from app.services.retrieval_pipeline import HybridRetrievalPipeline
 
 
 class KnowledgeRetrievalService:
-    """Build retrieval hits from query embedding and vector search."""
+    """把 retrieval pipeline 结果映射成接口响应对象。"""
 
     def __init__(
         self,
         repository: PolicyRepository,
-        pipeline: ExactVectorRetrievalPipeline | None = None,
+        pipeline: HybridRetrievalPipeline | None = None,
     ) -> None:
         self.repository = repository
-        self.pipeline = pipeline or ExactVectorRetrievalPipeline(repository)
+        self.pipeline = pipeline or HybridRetrievalPipeline(repository)
 
     def search(self, request: RetrievalSearchRequest) -> RetrievalSearchResponse:
         pipeline_result = self.pipeline.run(request)
 
+        # 这里不重新计算来源和分数，只把 pipeline 已经解释好的结果透传到接口层。
         hits = [
             RetrievalHit(
                 document_id=item.document_id,
@@ -41,8 +42,10 @@ class KnowledgeRetrievalService:
                 chunk_text=item.chunk_text,
                 score=round(item.score, 6),
                 rank=index,
-                retrieval_source="vector",
-                score_breakdown={"vector": round(item.score, 6)},
+                retrieval_source=item.retrieval_source,
+                score_breakdown={
+                    key: round(value, 6) for key, value in item.score_breakdown.items()
+                },
             )
             for index, item in enumerate(pipeline_result.hits, start=1)
         ]

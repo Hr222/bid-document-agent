@@ -193,6 +193,101 @@ class ChunkSlice:
     chunk_in_section: int
 
 
+@dataclass(slots=True)
+class RetrievalKeywordPlan:
+    """关键词召回前的查询拆解结果。"""
+
+    normalized_query: str
+    focus_query: str
+    keywords: list[str]
+
+
+class PolicyRetrievalQueryPolicy:
+    """制度检索中的查询归一化与关键词提取规则。"""
+
+    # TODO: 当前仍处于 MVP 阶段，这批规则先写死在领域层，方便快速验证效果。
+    # 后续如果问题类型变多，或需要按业务线维护不同规则，再演进为可配置规则集。
+    _question_phrases = (
+        "哪些人",
+        "哪些",
+        "什么人",
+        "什么",
+        "多久",
+        "多长时间",
+        "多长",
+        "多少",
+        "几个",
+        "几级",
+        "几天",
+        "几个月",
+        "是否",
+        "吗",
+        "么",
+        "如何",
+        "怎么",
+        "怎么办",
+        "有哪",
+        "有哪些",
+        "在哪",
+        "哪里",
+    )
+    _noise_terms = {
+        "什么",
+        "哪些",
+        "多久",
+        "多少",
+        "是否",
+        "如何",
+        "怎么",
+        "办法",
+        "规定",
+        "要求",
+    }
+
+    def build_keyword_plan(self, query: str) -> RetrievalKeywordPlan:
+        normalized_query = self.normalize_query(query)
+        focus_query = normalized_query
+        for phrase in self._question_phrases:
+            focus_query = focus_query.replace(phrase, "")
+        focus_query = focus_query or normalized_query
+
+        candidates: list[str] = []
+        if len(focus_query) >= 2:
+            candidates.append(focus_query)
+        for size in (4, 3, 2):
+            for index in range(0, max(0, len(focus_query) - size + 1)):
+                term = focus_query[index : index + size]
+                if self.should_keep_keyword(term):
+                    candidates.append(term)
+
+        deduplicated_keywords: list[str] = []
+        seen: set[str] = set()
+        for item in candidates:
+            if item not in seen:
+                deduplicated_keywords.append(item)
+                seen.add(item)
+            if len(deduplicated_keywords) >= 12:
+                break
+
+        return RetrievalKeywordPlan(
+            normalized_query=normalized_query,
+            focus_query=focus_query,
+            keywords=deduplicated_keywords,
+        )
+
+    def normalize_query(self, query: str) -> str:
+        return "".join(re.findall(r"[0-9a-zA-Z\u4e00-\u9fff]+", query.lower()))
+
+    def should_keep_keyword(self, term: str) -> bool:
+        if len(term) < 2:
+            return False
+        if term in self._noise_terms:
+            return False
+        if len(set(term)) == 1:
+            return False
+        return True
+
+
 class PolicyChunkingPolicy:
     """先保留 section 边界，再按长度切块的规则。"""
 

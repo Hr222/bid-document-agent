@@ -5,6 +5,7 @@ import type {
   RetrievalSearchResponse,
 } from "../types/retrieval";
 
+// 调试信息里既有布尔值也有空值，这里统一转成界面可展示的字符串。
 function formatDebugValue(value: string | number | boolean | null) {
   if (value === null) {
     return UI_TEXT.none;
@@ -43,6 +44,7 @@ function renderHits(
             <span>{hit.section_path ?? UI_TEXT.noSectionPath}</span>
           </div>
           <div className="section-meta">
+            {/* 把后端返回的分数拆解直接展示出来，方便人工理解命中原因。 */}
             {Object.entries(hit.score_breakdown).map(([key, value]) => (
               <span key={key}>{`${key}: ${value.toFixed(4)}`}</span>
             ))}
@@ -69,6 +71,7 @@ function renderDebugInfo(debug: RetrievalDebugInfo | null) {
         </div>
       </article>
 
+      {/* 逐阶段展示检索链路，让前端也能看到“输入经过了哪些步骤、产出了多少结果”。 */}
       {debug.stages.map((stage) => (
         <article key={`${stage.name}-${stage.source ?? "none"}`} className="section-item">
           <div className="section-meta">
@@ -92,6 +95,7 @@ export function RetrievalResultPanel({
   searchResult,
   answerResult,
 }: RetrievalResultPanelProps) {
+  // ask 成功后优先展示问答链路返回的数据；否则回退到 search 结果。
   const activeHits = answerResult?.hits ?? searchResult?.hits ?? [];
   const debugInfo = answerResult?.debug ?? searchResult?.debug ?? null;
 
