@@ -1,0 +1,14 @@
+[
+  {
+    "case_id": "HR-001",
+    "query": "人事管理制度适用于哪些人",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第二条"
+  },
+  {
+    "case_id": "HR-002",
+    "query": "员工试用期多久",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第五条"
+  }
+]

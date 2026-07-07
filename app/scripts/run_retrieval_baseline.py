@@ -111,7 +111,8 @@ def main() -> None:
     """执行 Step A 的最小检索 baseline，并输出 JSON 结果。"""
 
     project_root = Path(__file__).resolve().parents[2]
-    eval_path = project_root / "docs" / "retrieval_eval_set_step_a.json"
+    # 评测集属于测试资产，放在 tests 目录下，避免和普通说明文档混在一起。
+    eval_path = project_root / "tests" / "retrieval_eval_set_step_a.json"
     eval_cases = load_eval_cases(eval_path)
     results = run_baseline(eval_cases)
     output = {

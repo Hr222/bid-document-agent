@@ -1,6 +1,6 @@
 # 第二阶段 Milestone B 工作计划
 
-本文档用于记录当前 `Agent Phase 2 / Milestone B` 的目标、拆解步骤、验收标准与前置结论，方便明天继续开发时直接接上，不需要重新回忆上下文。
+本文档用于记录当前 `Agent Phase 2 / Milestone B` 的目标、拆解步骤、验收标准与前置结论，方便后续继续开发时直接接上，不需要重新回忆上下文。
 
 ## 1. 先记住当前结论
 
@@ -15,6 +15,17 @@
 当前 `Milestone A` 的准确定位不是“效果优化完成”，而是：
 
 **已经把单路向量检索整理成可扩展、可调试、可继续评测的底座。**
+
+在此基础上，`Milestone B` 当前第一轮最小闭环已经完成：
+
+1. 已补最小可用的关键词召回
+2. 已接入双路召回 pipeline
+3. 已完成第一版简单融合与去重
+4. 已重新跑通最小 baseline
+
+当前可以把阶段状态明确表述为：
+
+**Milestone B 第一轮（混合召回 MVP）已完成，下一步进入 rerank 判断与小步验证。**
 
 ## 2. Milestone B 要解决什么
 
@@ -50,6 +61,12 @@
 - `app/services/retrieval_pipeline.py`
 - `app/services/retrieval_service.py`
 
+这一步当前已经完成，当前实现形态是：
+
+- 未引入完整 BM25
+- 当前采用“查询拆解 + 多字段 contains 命中 + 启发式加权”
+- 查询规则当前已下沉到领域规则层，后续可继续演进
+
 这一步做完应达到：
 
 - 输入查询后，除了向量召回，还能拿到一份关键词召回结果
@@ -77,6 +94,14 @@
 - `debug.stages` 的输出不要丢
 - `RetrievalSearchResponse` 的结构尽量不推翻，只做增量扩展
 
+这一步当前已经完成，当前 pipeline 顺序为：
+
+1. 查询 embedding
+2. 向量召回
+3. 关键词召回
+4. 结果融合
+5. 分数过滤
+
 这一步做完应达到：
 
 - `search` 和 `ask` 都能走双路召回
@@ -94,6 +119,14 @@
 - 保留 `score_breakdown`
 - 先按简单融合分排序
 
+这一步当前已经完成，当前第一版融合规则为：
+
+- 按 `chunk_id` 去重
+- 同一 chunk 同时被两路命中时合并
+- 保留 `score_breakdown`
+- 当前支持返回 `vector / keyword / hybrid`
+- 关键词命中原因已补充到 `debug.stages`
+
 这一步做完应达到：
 
 - 同一 chunk 不会重复展示
@@ -107,7 +140,28 @@
 建议直接复用现有：
 
 - `app/scripts/run_retrieval_baseline.py`
-- `docs/retrieval_eval_set_step_a.json`
+- `tests/retrieval_eval_set_step_a.json`
+
+这一步当前也已经完成，当前最小评测集已重建并放入 `tests/` 目录，避免再和普通说明文档混淆。
+
+当前 baseline 结果如下：
+
+- `total_cases = 2`
+- `top1 document match = 2`
+- `top1 section match = 1`
+- `top3 section match = 2`
+- `zero_hit_count = 0`
+
+其中重点人工结论为：
+
+- `HR-001`
+  - 期望条款：`第二条`
+  - 当前结果：已进入 `top2`
+  - 说明：召回已到位，但 `top1` 仍不够准
+- `HR-002`
+  - 期望条款：`第五条`
+  - 当前结果：已到 `top1`
+  - 说明：混合召回第一轮已有明显改善
 
 这一步做完应补充记录：
 
@@ -123,6 +177,10 @@
 
 那 `Milestone B` 第一轮就算落地成功。
 
+基于当前最小 baseline，可以把结论记为：
+
+**Milestone B 第一轮已经落地成功，且已经具备进入 rerank 判断阶段的依据。**
+
 ### Step B5：只有在效果还不够时，再考虑 rerank
 
 如果 `Step B4` 后发现：
@@ -132,41 +190,51 @@
 
 那再进入 rerank。
 
-也就是说，`rerank` 不是明天必须开做的内容，而是：
+当前最新判断是：
+
+- `HR-002` 已经说明混合召回本身有效
+- `HR-001` 说明当前问题已经从“召回不到”转为“排序不够准”
+
+也就是说，`rerank` 现在不再只是预备选项，而是：
+
+**Milestone B 下一小步最合理的推进方向。**
+
+也就是说，`rerank` 不是一开始就必须做的内容，而是：
 
 **只有在双路召回 + 简单融合之后仍然不够，再作为下一小步。**
 
-## 4. 明天真正的落地范围
+## 4. 当前真实落地范围
 
-明天最合理的完成范围不是“做完整个 Milestone B”，而是：
+当前这轮已经实际完成的是：
 
 1. 做完 `Step B1`
 2. 做完 `Step B2`
-3. 尽量完成 `Step B3`
-4. 至少跑通一次 `Step B4`
+3. 做完 `Step B3`
+4. 跑通了 `Step B4`
 
-如果这个范围顺利完成，那么我们就能得到一个非常清晰的结果：
+当前已经得到的结果是：
 
 - 仓库里已经有第一版混合召回
 - baseline 已经能对比优化前后效果
 - 是否需要 rerank，不再靠感觉判断
 
-## 5. 明天要看的文件入口
+## 5. 当前要看的文件入口
 
-如果明天开始时只想快速进入状态，建议按这个顺序看：
+如果现在继续往下推进，建议按这个顺序看：
 
-1. `docs/retrieval_baseline_step_a.md`
-2. `docs/retrieval_eval_set_step_a.json`
-3. `app/scripts/run_retrieval_baseline.py`
-4. `app/services/retrieval_pipeline.py`
-5. `app/services/retrieval_service.py`
-6. `app/repositories/policy_repository.py`
+1. `tests/retrieval_eval_set_step_a.json`
+2. `app/scripts/run_retrieval_baseline.py`
+3. `app/services/retrieval_pipeline.py`
+4. `app/services/retrieval_service.py`
+5. `app/repositories/policy_repository.py`
+6. `app/domain/policy/rules.py`
 
 这样看完后，会很清楚：
 
 - 当前 baseline 是怎么跑的
 - 当前评测问题是什么
 - 关键词召回应该从哪里接进去
+- rerank 下一步该接在什么位置
 
 ## 6. 每个小步骤的验收标准
 
@@ -194,9 +262,16 @@
 - 至少记录一版优化后结果
 - `HR-001`、`HR-002` 这两个问题要重点人工复核
 
+当前状态：已通过。
+
+补充结果：
+
+- `HR-001`：仍是 `top2`
+- `HR-002`：已到 `top1`
+
 ## 7. 当前不做的内容
 
-以下内容先明确不放进明天的最小落地范围：
+以下内容当前仍明确不放进本轮最小落地范围：
 
 - HNSW
 - 大规模评测体系重构
@@ -210,6 +285,6 @@
 
 ## 8. 一句话交接
 
-如果明天继续开发时只看一句话，请记住：
+如果继续开发时只看一句话，请记住：
 
-**Milestone B 明天先做关键词召回、双路接入、简单融合和 baseline 对比，不要一上来就做 rerank 和 HNSW。**
+**Milestone B 第一轮已经完成关键词召回、双路接入、简单融合和 baseline 对比；下一步聚焦 rerank，小步验证“召回已够但 top1 仍不准”的问题，不要和 HNSW 混在一起做。**
