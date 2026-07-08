@@ -20,15 +20,23 @@ from app.services.retrieval.pipeline import (
 )
 from app.services.retrieval.rerank import HeuristicRetrievalReranker
 from app.services.retrieval.service import KnowledgeRetrievalService
+from app.services.retrieval.vector_search import (
+    ExactVectorSearchStrategy,
+    HnswVectorSearchStrategy,
+    build_vector_search_strategy,
+)
 
 __all__ = [
     "ExactVectorRetrievalPipeline",
+    "ExactVectorSearchStrategy",
     "HeuristicRetrievalReranker",
     "HybridHitFusionService",
     "HybridRetrievalPipeline",
+    "HnswVectorSearchStrategy",
     "INSUFFICIENT_EVIDENCE_ANSWER",
     "KnowledgeRetrievalService",
     "RagAnswerService",
     "RetrievalPipelineResult",
     "RetrievalStageTrace",
+    "build_vector_search_strategy",
 ]

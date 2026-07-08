@@ -185,6 +185,26 @@ class PolicyRepository:
         document_id: int | None = None,
         include_history: bool = False,
     ) -> list[RetrievedPolicyChunk]:
+        # 兼容旧调用入口；Milestone C 起主链路应改走显式策略方法。
+        return self.search_chunks_exact(
+            query_embedding=query_embedding,
+            top_k=top_k,
+            policy_category=policy_category,
+            responsible_department=responsible_department,
+            document_id=document_id,
+            include_history=include_history,
+        )
+
+    def search_chunks_exact(
+        self,
+        *,
+        query_embedding: list[float],
+        top_k: int,
+        policy_category: str | None = None,
+        responsible_department: str | None = None,
+        document_id: int | None = None,
+        include_history: bool = False,
+    ) -> list[RetrievedPolicyChunk]:
         distance_expr = PolicyChunk.embedding.cosine_distance(query_embedding)
 
         statement = (
@@ -245,6 +265,20 @@ class PolicyRepository:
                 )
             )
         return results
+
+    def search_chunks_hnsw(
+        self,
+        *,
+        query_embedding: list[float],
+        top_k: int,
+        policy_category: str | None = None,
+        responsible_department: str | None = None,
+        document_id: int | None = None,
+        include_history: bool = False,
+    ) -> list[RetrievedPolicyChunk]:
+        raise NotImplementedError(
+            "HNSW 向量检索尚未接入；当前阶段仅支持 exact，待 Milestone C Step C3 落地。"
+        )
 
     def search_chunks_by_keywords(
         self,

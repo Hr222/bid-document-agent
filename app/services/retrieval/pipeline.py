@@ -8,6 +8,11 @@ from app.services.retrieval.contracts import QueryEmbeddingService, RetrievalRep
 from app.services.retrieval.fusion import HybridHitFusionService
 from app.services.retrieval.models import RetrievalPipelineResult, RetrievalStageTrace
 from app.services.retrieval.rerank import HeuristicRetrievalReranker
+from app.services.retrieval.vector_search import (
+    VectorSearchStrategy,
+    VectorSearchRequest,
+    build_vector_search_strategy,
+)
 from app.services.ingestion.steps.policy_embedding import PolicyEmbeddingService
 
 
@@ -24,6 +29,7 @@ class HybridRetrievalPipeline:
         query_policy: PolicyRetrievalQueryPolicy | None = None,
         fusion_service: HybridHitFusionService | None = None,
         reranker: HeuristicRetrievalReranker | None = None,
+        vector_search_strategy: VectorSearchStrategy | None = None,
     ) -> None:
         self.repository = repository
         self.embedding_service = embedding_service or PolicyEmbeddingService()
@@ -31,6 +37,9 @@ class HybridRetrievalPipeline:
         self.fusion_service = fusion_service or HybridHitFusionService()
         self.reranker = reranker or HeuristicRetrievalReranker(
             query_policy=self.query_policy
+        )
+        self.vector_search_strategy = vector_search_strategy or build_vector_search_strategy(
+            settings.vector_search_strategy
         )
         # 保留旧属性名，避免旧测试或调用方直接读取时断裂。
         self.rerank_base_weight = self.reranker.base_weight
@@ -46,13 +55,16 @@ class HybridRetrievalPipeline:
         keyword_plan = self.query_policy.build_keyword_plan(request.query)
         query_embedding = self.embedding_service.embed_query(request.query)
 
-        vector_hits = self.repository.search_chunks(
-            query_embedding=query_embedding,
-            top_k=per_source_top_k,
-            policy_category=request.policy_category,
-            responsible_department=request.responsible_department,
-            document_id=request.document_id,
-            include_history=request.include_history,
+        vector_hits = self.vector_search_strategy.search(
+            repository=self.repository,
+            request=VectorSearchRequest(
+                query_embedding=query_embedding,
+                top_k=per_source_top_k,
+                policy_category=request.policy_category,
+                responsible_department=request.responsible_department,
+                document_id=request.document_id,
+                include_history=request.include_history,
+            ),
         )
         keyword_hits = self.repository.search_chunks_by_keywords(
             focus_query=keyword_plan.focus_query,
@@ -87,10 +99,11 @@ class HybridRetrievalPipeline:
             ),
             RetrievalStageTrace(
                 name="vector_recall",
-                source="pgvector_cosine_exact",
+                source=self.vector_search_strategy.source_name,
                 input_count=None,
                 output_count=len(vector_hits),
                 details={
+                    "strategy": self.vector_search_strategy.strategy_name,
                     "top_k": per_source_top_k,
                     "include_history": request.include_history,
                     "document_filter": request.document_id,
@@ -144,7 +157,7 @@ class HybridRetrievalPipeline:
         return RetrievalPipelineResult(
             hits=filtered_hits,
             pipeline=self.pipeline_name,
-            strategy=self.strategy_name,
+            strategy=f"{self.strategy_name}/{self.vector_search_strategy.strategy_name}",
             min_score=settings.retrieval_min_score,
             traces=traces,
         )

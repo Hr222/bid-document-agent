@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+from app.core.config import settings
+from app.repositories.policy_repository import RetrievedPolicyChunk
+from app.schemas import RetrievalSearchRequest
+from app.services.retrieval import (
+    ExactVectorSearchStrategy,
+    HnswVectorSearchStrategy,
+    HybridRetrievalPipeline,
+    build_vector_search_strategy,
+)
+
+
+class StubEmbeddingService:
+    def embed_query(self, query: str) -> list[float]:
+        assert query
+        return [0.1, 0.2, 0.3]
+
+
+class TrackingRepository:
+    def __init__(self) -> None:
+        self.called_strategy: str | None = None
+
+    def search_chunks_exact(self, **kwargs) -> list[RetrievedPolicyChunk]:
+        self.called_strategy = "exact"
+        return [
+            RetrievedPolicyChunk(
+                document_id=1,
+                version_id=1,
+                chunk_id=1,
+                policy_name="人事管理制度",
+                policy_category="人事制度",
+                responsible_department="人力资源部",
+                version_label="2025",
+                section_title="第二条",
+                section_path="总则 / 第二条",
+                page_no=1,
+                chunk_text="本制度适用于公司全体员工。",
+                score=0.88,
+                retrieval_source="vector",
+                score_breakdown={"vector": 0.88},
+                debug_details={},
+            )
+        ]
+
+    def search_chunks_hnsw(self, **kwargs) -> list[RetrievedPolicyChunk]:
+        self.called_strategy = "hnsw"
+        return []
+
+    def search_chunks(self, **kwargs) -> list[RetrievedPolicyChunk]:
+        self.called_strategy = "legacy"
+        return []
+
+    def search_chunks_by_keywords(self, **kwargs) -> list[RetrievedPolicyChunk]:
+        return []
+
+
+def test_build_vector_search_strategy_returns_supported_strategies() -> None:
+    assert isinstance(build_vector_search_strategy("exact"), ExactVectorSearchStrategy)
+    assert isinstance(build_vector_search_strategy("hnsw"), HnswVectorSearchStrategy)
+
+
+def test_pipeline_uses_exact_vector_strategy_from_settings(monkeypatch) -> None:
+    original_strategy = settings.vector_search_strategy
+    monkeypatch.setattr(settings, "vector_search_strategy", "exact")
+    repository = TrackingRepository()
+
+    try:
+        pipeline = HybridRetrievalPipeline(
+            repository=repository,
+            embedding_service=StubEmbeddingService(),
+        )
+        result = pipeline.run(
+            RetrievalSearchRequest(
+                query="人事管理制度适用于哪些人",
+                top_k=3,
+            )
+        )
+    finally:
+        monkeypatch.setattr(settings, "vector_search_strategy", original_strategy)
+
+    assert repository.called_strategy == "exact"
+    assert result.strategy == "hybrid-vector-keyword/exact"
+    vector_trace = next(trace for trace in result.traces if trace.name == "vector_recall")
+    assert vector_trace.source == "pgvector_cosine_exact"
+    assert vector_trace.details["strategy"] == "exact"

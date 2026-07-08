@@ -23,6 +23,12 @@ class StubRepository:
         self._vector_hits = vector_hits
         self._keyword_hits = keyword_hits
 
+    def search_chunks_exact(self, **kwargs) -> list[RetrievedPolicyChunk]:
+        return [replace(hit) for hit in self._vector_hits]
+
+    def search_chunks_hnsw(self, **kwargs) -> list[RetrievedPolicyChunk]:
+        raise AssertionError("Milestone C Step C2 默认不应走 HNSW 召回。")
+
     def search_chunks(self, **kwargs) -> list[RetrievedPolicyChunk]:
         return [replace(hit) for hit in self._vector_hits]
 

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -36,6 +38,7 @@ class Settings(BaseSettings):
     retrieval_top_k_default: int = 5
     retrieval_top_k_max: int = 20
     retrieval_min_score: float = 0.45
+    vector_search_strategy: Literal["exact", "hnsw"] = "exact"
     rag_answer_top_k: int = 6
     rag_max_context_chars_per_chunk: int = 500
     ocr_enabled: bool = True
