@@ -12,11 +12,11 @@ from app.schemas import (
     RetrievalSearchResponse,
 )
 from app.services.exceptions import ServiceNotConfiguredError, UpstreamServiceError
-from app.services.rag_answer_service import (
+from app.services.retrieval import (
     INSUFFICIENT_EVIDENCE_ANSWER,
+    KnowledgeRetrievalService,
     RagAnswerService,
 )
-from app.services.retrieval_service import KnowledgeRetrievalService
 
 router = APIRouter()
 

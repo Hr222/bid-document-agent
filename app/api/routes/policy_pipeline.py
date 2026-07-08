@@ -11,8 +11,7 @@ from app.db.schema_health import KB_SCHEMA_SETUP_GUIDE, is_missing_kb_schema_err
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas import PolicyPipelineRequest, PolicyPipelineResponse
 from app.schemas.policy_upload import PolicyUploadIngestRequest, PolicyUploadPreviewResponse
-from app.services.pipeline import PolicyPipelineService
-from app.services.policy_upload_service import PolicyUploadService
+from app.services.ingestion import PolicyPipelineService, PolicyUploadService
 
 router = APIRouter()
 logger = get_logger("app.api.policy_pipeline")

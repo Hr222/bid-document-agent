@@ -7,7 +7,7 @@ from pathlib import Path
 from app.db.session import SessionLocal
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas import RetrievalSearchRequest
-from app.services.retrieval_service import KnowledgeRetrievalService
+from app.services.retrieval import KnowledgeRetrievalService
 
 
 @dataclass(slots=True)

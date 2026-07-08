@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.policy_ingestion import PolicyScanRequest, PolicyScanResponse
-from app.services.policy_ingestion import PolicyIngestionService
+from app.services.ingestion import PolicyIngestionService
 
 router = APIRouter()
 

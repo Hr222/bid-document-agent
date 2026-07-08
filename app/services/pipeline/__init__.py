@@ -1,5 +1,5 @@
-"""流水线编排包。"""
+"""兼容旧导入路径的入库 pipeline 包装包。"""
 
-from app.services.pipeline.policy_pipeline import PolicyPipelineService
+from app.services.ingestion.pipeline import PolicyPipelineService
 
 __all__ = ["PolicyPipelineService"]
