@@ -21,7 +21,7 @@ PipelineStageName = Literal[
 
 PipelineStatus = Literal["pending", "skipped", "success", "failed"]
 ParserStatus = Literal["parsed", "failed"]
-DocumentFileType = Literal["docx", "pdf"]
+DocumentFileType = Literal["docx", "pdf", "image"]
 ParseMethod = Literal["direct", "ocr", "mixed"]
 BlockType = Literal["text", "table", "image", "page_break"]
 BlockSource = Literal["direct", "ocr", "mixed"]

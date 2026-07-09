@@ -18,6 +18,16 @@ _CUSTOM_IMAGE_MEDIA_TYPES = {
     ".jp2": "image/jp2",
     ".jpx": "image/jp2",
 }
+_IMAGE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
+_INLINE_IMAGE_PLACEHOLDER_PREFIX = "[IMAGE_OCR_"
 
 
 class PolicyParserService:
@@ -45,6 +55,13 @@ class PolicyParserService:
                 suspected_scanned_pdf=False,
                 notes=[],
             )
+        if suffix in _IMAGE_EXTENSIONS:
+            return ParseRoutingResult(
+                parser_name="ImageBlockParser",
+                parse_method="direct",
+                suspected_scanned_pdf=False,
+                notes=["图片文件将直接进入 OCR 流程。"],
+            )
 
         raise ValueError(f"当前文件类型未配置解析器：{suffix}")
 
@@ -57,6 +74,8 @@ class PolicyParserService:
             return self._parse_docx(source_path)
         if suffix == ".pdf":
             return self._parse_pdf(source_path)
+        if suffix in _IMAGE_EXTENSIONS:
+            return self._parse_image(source_path)
         raise ValueError(f"不支持的文件类型：{suffix}")
 
     def _parse_docx(self, source_path: str) -> ParsedDocumentResult:
@@ -70,6 +89,7 @@ class PolicyParserService:
 
         document = Document(source_path)
         blocks: list[ParsedBlock] = []
+        has_effective_text = False
 
         relation_by_rid = {
             rel_id: rel for rel_id, rel in document.part.rels.items() if "image" in rel.reltype
@@ -105,19 +125,46 @@ class PolicyParserService:
 
         for item in iter_block_items(document):
             if isinstance(item, Paragraph):
-                paragraph_text = item.text.strip()
-                image_rel_ids: list[str] = []
-                for drawing in item._element.xpath(".//*[local-name()='blip']"):
-                    rel_id = drawing.get(
-                        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
-                    )
-                    if rel_id:
-                        image_rel_ids.append(rel_id)
+                paragraph_parts: list[str] = []
+                paragraph_image_entries: list[tuple[str, str]] = []
+                paragraph_has_effective_text = False
 
+                for run in item.runs:
+                    if run.text and run.text.strip():
+                        paragraph_has_effective_text = True
+                        paragraph_parts.append(run.text)
+                    elif run.text:
+                        paragraph_parts.append(run.text)
+
+                    for drawing in run._element.xpath(".//*[local-name()='blip']"):
+                        rel_id = drawing.get(
+                            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
+                        )
+                        if not rel_id:
+                            continue
+
+                        placeholder_token = (
+                            f"{_INLINE_IMAGE_PLACEHOLDER_PREFIX}{len(blocks) + len(paragraph_image_entries) + 1}]"
+                        )
+                        paragraph_parts.append(placeholder_token)
+                        paragraph_image_entries.append((placeholder_token, rel_id))
+
+                paragraph_text = "".join(paragraph_parts).strip()
                 if paragraph_text:
-                    append_block(block_type="text", text=paragraph_text)
+                    append_block(
+                        block_type="text",
+                        text=paragraph_text,
+                        metadata={
+                            "container": "paragraph",
+                            "ocr_placeholder_tokens": [
+                                placeholder_token
+                                for placeholder_token, _ in paragraph_image_entries
+                            ],
+                            "has_effective_text": paragraph_has_effective_text,
+                        },
+                    )
 
-                for rel_id in image_rel_ids:
+                for placeholder_token, rel_id in paragraph_image_entries:
                     relation = relation_by_rid.get(rel_id)
                     image_bytes = relation.target_part.blob if relation is not None else b""
                     image_name = (
@@ -132,11 +179,13 @@ class PolicyParserService:
                         metadata={
                             "container": "paragraph",
                             "image_rel_id": rel_id,
+                            "placeholder_token": placeholder_token,
                             "image_name": image_name,
                             "image_media_type": image_media_type,
                             "image_bytes": image_bytes.hex(),
                         },
                     )
+                has_effective_text = has_effective_text or paragraph_has_effective_text
             else:
                 table_lines: list[str] = []
                 for row in item.rows:
@@ -147,16 +196,23 @@ class PolicyParserService:
                     append_block(
                         block_type="table",
                         text="\n".join(table_lines),
-                        metadata={"row_count": len(table_lines)},
+                        metadata={"row_count": len(table_lines), "has_effective_text": True},
                     )
+                    has_effective_text = True
+
+        has_image_block = any(block.block_type == "image" for block in blocks)
+        suspected_scanned = has_image_block and not has_effective_text
+        notes: list[str] = []
+        if suspected_scanned:
+            notes.append("DOCX 未直接提取到正文，检测到图片块，将在 OCR 阶段继续处理。")
 
         return ParsedDocumentResult(
             parser_status="parsed",
             source_path=source_path,
             file_type="docx",
-            suspected_scanned=False,
+            suspected_scanned=suspected_scanned,
             blocks=blocks,
-            notes=[],
+            notes=notes,
         )
 
     def _parse_pdf(self, source_path: str) -> ParsedDocumentResult:
@@ -251,6 +307,33 @@ class PolicyParserService:
             suspected_scanned=suspected_scanned,
             blocks=blocks,
             notes=notes,
+        )
+
+    def _parse_image(self, source_path: str) -> ParsedDocumentResult:
+        path = Path(source_path)
+        image_bytes = path.read_bytes()
+        return ParsedDocumentResult(
+            parser_status="parsed",
+            source_path=source_path,
+            file_type="image",
+            suspected_scanned=True,
+            blocks=[
+                ParsedBlock(
+                    block_id=uuid.uuid4().hex,
+                    order=0,
+                    page_no=1,
+                    block_type="image",
+                    source="direct",
+                    text=None,
+                    metadata={
+                        "image_name": path.name,
+                        "image_media_type": self._guess_image_media_type(path.name),
+                        "image_bytes": image_bytes.hex(),
+                    },
+                    layout_hint={},
+                )
+            ],
+            notes=["图片文件将直接通过 OCR 提取正文。"],
         )
 
     def _guess_image_media_type(self, image_name: str | None) -> str | None:

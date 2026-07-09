@@ -22,7 +22,16 @@ class PolicyIntakeDecision:
 class PolicyIntakePolicy:
     """制度文档准入规则。"""
 
-    _allowed_extensions = {".docx", ".pdf"}
+    _image_extensions = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".webp",
+    }
+    _allowed_extensions = {".doc", ".docx", ".pdf", *_image_extensions}
     _excluded_keywords = {
         "身份证",
         "签字",
@@ -49,7 +58,7 @@ class PolicyIntakePolicy:
                 detected_file_kind="unsupported",
                 needs_normalization=False,
                 recommended_parse_method="skip",
-                warnings=["当前 MVP 仅允许 .docx 和原生文本型 .pdf 文件。"],
+                warnings=["当前 MVP 仅允许 .doc/.docx/.pdf 以及常见图片扫描件文件。"],
             )
 
         if size_bytes <= 0:
@@ -72,6 +81,15 @@ class PolicyIntakePolicy:
                     warnings=[f"文件名命中排除关键词：{keyword}"],
                 )
 
+        if extension == ".doc":
+            return PolicyIntakeDecision(
+                is_allowed=True,
+                detected_file_kind="word_legacy",
+                needs_normalization=True,
+                recommended_parse_method="doc",
+                warnings=["旧版 .doc 文件会先转换为 .docx，再进入后续解析流程。"],
+            )
+
         if extension == ".docx":
             return PolicyIntakeDecision(
                 is_allowed=True,
@@ -79,6 +97,15 @@ class PolicyIntakePolicy:
                 needs_normalization=False,
                 recommended_parse_method="docx",
                 warnings=[],
+            )
+
+        if extension in self._image_extensions:
+            return PolicyIntakeDecision(
+                is_allowed=True,
+                detected_file_kind="image_scan",
+                needs_normalization=False,
+                recommended_parse_method="image",
+                warnings=["图片文件将直接进入 OCR 流程。"],
             )
 
         return PolicyIntakeDecision(

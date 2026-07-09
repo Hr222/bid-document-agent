@@ -14,6 +14,7 @@
 # - 这里只是 Python 包，系统里仍可能需要单独安装 Tesseract
 pillow>=11.3,<12.0
 pytesseract>=0.3.13,<1.0
+tencentcloud-sdk-python>=3.0,<4.0
 
 # 测试与调试
 pytest>=8.4,<9.0

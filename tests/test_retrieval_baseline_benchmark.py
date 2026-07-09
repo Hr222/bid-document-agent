@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pytest
+
 from app.scripts.run_retrieval_baseline import (
     BenchmarkCaseResult,
+    EvalCaseDefinition,
     StrategyCaseResult,
+    build_eval_set_summary,
     build_comparison_summary,
+    load_eval_cases,
     build_strategy_summary,
 )
 from app.services.retrieval.vector_search import VectorSearchStrategyName
@@ -165,4 +173,123 @@ def test_build_comparison_summary_marks_regression_and_speedup() -> None:
         "same_latency_case_count": 0,
         "average_elapsed_delta_ms": 0.0,
         "top3_section_regression_case_ids": ["case-1"],
+    }
+
+
+def test_load_eval_cases_validates_required_fields_and_deduplicates_tags(
+    tmp_path: Path,
+) -> None:
+    eval_path = tmp_path / "eval.json"
+    eval_path.write_text(
+        json.dumps(
+            [
+                {
+                    "case_id": "HR-001",
+                    "query": "员工试用期多久",
+                    "expected_document_name": "制度A",
+                    "expected_section_title": "第五条",
+                    "policy_category": "管理制度",
+                    "question_type": "时效",
+                    "tags": ["试用期", "录用", "试用期"],
+                    "notes": "验证试用期条款是否能稳定命中。",
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    cases = load_eval_cases(eval_path)
+
+    assert cases == [
+        EvalCaseDefinition(
+            case_id="HR-001",
+            query="员工试用期多久",
+            expected_document_name="制度A",
+            expected_section_title="第五条",
+            policy_category="管理制度",
+            question_type="时效",
+            tags=("试用期", "录用"),
+            notes="验证试用期条款是否能稳定命中。",
+        )
+    ]
+
+
+def test_load_eval_cases_rejects_duplicate_case_ids(tmp_path: Path) -> None:
+    eval_path = tmp_path / "eval.json"
+    eval_path.write_text(
+        json.dumps(
+            [
+                {
+                    "case_id": "HR-001",
+                    "query": "问题一",
+                    "expected_document_name": "制度A",
+                    "expected_section_title": "第一条",
+                    "policy_category": "管理制度",
+                    "question_type": "定义",
+                },
+                {
+                    "case_id": "HR-001",
+                    "query": "问题二",
+                    "expected_document_name": "制度A",
+                    "expected_section_title": "第二条",
+                    "policy_category": "管理制度",
+                    "question_type": "条件",
+                },
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="重复 case_id"):
+        load_eval_cases(eval_path)
+
+
+def test_build_eval_set_summary_counts_categories_question_types_and_tags() -> None:
+    summary = build_eval_set_summary(
+        [
+            EvalCaseDefinition(
+                case_id="HR-001",
+                query="适用于哪些人",
+                expected_document_name="人事管理制度",
+                expected_section_title="第二条",
+                policy_category="管理制度",
+                question_type="适用范围",
+                tags=("适用范围", "总则"),
+            ),
+            EvalCaseDefinition(
+                case_id="HR-002",
+                query="试用期多久",
+                expected_document_name="人事管理制度",
+                expected_section_title="第五条",
+                policy_category="管理制度",
+                question_type="时效",
+                tags=("试用期", "录用"),
+            ),
+            EvalCaseDefinition(
+                case_id="HR-003",
+                query="出差回来要做什么",
+                expected_document_name="人事管理制度",
+                expected_section_title="第三十三条",
+                policy_category="管理制度",
+                question_type="流程",
+                tags=("出差", "流程"),
+            ),
+        ]
+    )
+
+    assert summary == {
+        "total_cases": 3,
+        "distinct_document_count": 1,
+        "policy_category_counts": {"管理制度": 3},
+        "question_type_counts": {"时效": 1, "流程": 1, "适用范围": 1},
+        "tag_counts": {
+            "出差": 1,
+            "总则": 1,
+            "录用": 1,
+            "流程": 1,
+            "试用期": 1,
+            "适用范围": 1,
+        },
     }

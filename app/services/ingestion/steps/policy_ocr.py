@@ -155,17 +155,21 @@ class PolicyOcrService:
         if not image_blocks:
             return []
 
+        if document.file_type == "image":
+            return [block for block in image_blocks if block.metadata.get("image_bytes")]
+
+        if document.file_type == "docx":
+            return [block for block in image_blocks if block.metadata.get("image_bytes")]
+
         if document.file_type != "pdf":
             return []
 
-        if not document.suspected_scanned:
-            return []
-
-        page_render_blocks = [
-            block for block in image_blocks if bool(block.metadata.get("pdf_page_render"))
-        ]
-        if page_render_blocks:
-            return page_render_blocks
+        if document.suspected_scanned:
+            page_render_blocks = [
+                block for block in image_blocks if bool(block.metadata.get("pdf_page_render"))
+            ]
+            if page_render_blocks:
+                return page_render_blocks
 
         return [block for block in image_blocks if block.metadata.get("image_bytes")]
 
@@ -173,11 +177,23 @@ class PolicyOcrService:
         image_blocks = [block for block in document.blocks if block.block_type == "image"]
         if not image_blocks:
             return ["当前文档未检测到需要 OCR 的图片块。"]
+        if document.file_type == "image":
+            return ["当前图片文件未形成 OCR 目标。"]
         if document.file_type == "docx":
-            return ["当前文档包含插图，默认跳过图片 OCR 以减少外部依赖。"]
+            if self._has_effective_text(document):
+                return ["当前 DOCX 已直接提取到正文，已跳过图片 OCR。"]
+            return ["当前 DOCX 缺少可用于 OCR 的图片块。"]
         if document.file_type == "pdf" and not document.suspected_scanned:
             return ["当前 PDF 已直接提取到正文，已跳过页面 OCR。"]
         return ["当前文档无需执行 OCR。"]
+
+    def _has_effective_text(self, document: ParsedDocumentResult) -> bool:
+        return any(
+            block.block_type in {"text", "table"}
+            and (block.text or "").strip()
+            and block.metadata.get("has_effective_text", True)
+            for block in document.blocks
+        )
 
     def _resolve_image_payload(self, source_path: str, block: ParsedBlock) -> tuple[bytes, str]:
         if block.metadata.get("pdf_page_render"):

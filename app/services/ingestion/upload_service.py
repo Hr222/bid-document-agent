@@ -7,9 +7,20 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
-SUPPORTED_UPLOAD_EXTENSIONS = {".docx", ".pdf"}
+SUPPORTED_UPLOAD_EXTENSIONS = {
+    ".doc",
+    ".docx",
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
 UNSUPPORTED_UPLOAD_MESSAGE = (
-    "当前仅支持 .docx / .pdf 文件，请先将 .doc 转换为 .docx 后再上传。"
+    "当前仅支持 .doc/.docx/.pdf 以及常见图片扫描件文件。"
 )
 
 

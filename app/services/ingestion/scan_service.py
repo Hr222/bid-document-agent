@@ -17,8 +17,9 @@ from app.schemas.policy_ingestion import (
 class PolicyIngestionService:
     """目录扫描辅助服务，不属于单文件入库步骤 1 到步骤 8 的主流水线。"""
 
-    _excluded_extensions = {".jpg", ".jpeg", ".png", ".zip", ".rar", ".7z"}
-    _supported_extensions = {".docx", ".pdf"}
+    _image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+    _excluded_extensions = {".zip", ".rar", ".7z"}
+    _supported_extensions = {".doc", ".docx", ".pdf", *_image_extensions}
     _excluded_keywords = {
         "身份证",
         "签字",
@@ -81,9 +82,8 @@ class PolicyIngestionService:
         extension = path.suffix.lower()
         relative_path = str(path.relative_to(root)) if path != root else path.name
         full_text = f"{path.name} {relative_path}"
-        suspected_scanned = extension == ".pdf" and self._contains_keyword(
-            full_text,
-            self._scanned_keywords,
+        suspected_scanned = extension in self._image_extensions or (
+            extension == ".pdf" and self._contains_keyword(full_text, self._scanned_keywords)
         )
 
         recommended_action = "exclude"
@@ -108,10 +108,18 @@ class PolicyIngestionService:
             parse_method = "skip"
             include_reason = None
             exclude_reason = "该文件类型不在首批 MVP 支持范围内。"
-        elif suspected_scanned:
-            recommended_action = "review"
+        elif extension == ".doc":
+            recommended_action = "include"
+            parse_method = "doc"
+            include_reason = "旧版 Word 文件可先转换为 .docx，再继续解析。"
+        elif extension in self._image_extensions:
+            recommended_action = "include"
             parse_method = "ocr"
-            include_reason = "该 PDF 疑似扫描件，不在当前原生文本 MVP 范围内。"
+            include_reason = "图片扫描件可直接进入 OCR 流程。"
+        elif suspected_scanned:
+            recommended_action = "include"
+            parse_method = "ocr"
+            include_reason = "该 PDF 疑似扫描件，将通过 OCR 流程继续处理。"
         else:
             recommended_action = "include"
             parse_method = "direct"

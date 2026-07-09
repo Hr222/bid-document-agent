@@ -19,6 +19,7 @@ class PolicyTextAssemblerService:
         paragraphs: list[str] = []
         tables: list[str] = []
         notes = list(document.notes)
+        inline_ocr_text = self._collect_inline_ocr_text(document)
 
         # 空 block 文档不应在组装阶段抛异常，保持可预期的空文本结果，
         # 让后续入库拦截或预览提示按正常分支处理。
@@ -31,10 +32,14 @@ class PolicyTextAssemblerService:
             if block.block_type == "page_break":
                 continue
 
-            if not (block.text or "").strip():
+            if block.block_type == "image" and block.metadata.get("placeholder_token"):
                 continue
 
-            block_lines = [line.strip() for line in (block.text or "").splitlines() if line.strip()]
+            resolved_text = self._resolve_inline_placeholders(block.text or "", inline_ocr_text)
+            if not resolved_text.strip():
+                continue
+
+            block_lines = [line.strip() for line in resolved_text.splitlines() if line.strip()]
             if not block_lines:
                 continue
 
@@ -79,3 +84,21 @@ class PolicyTextAssemblerService:
             if len(titles) >= 30:
                 break
         return titles
+
+    def _collect_inline_ocr_text(self, document: ParsedDocumentResult) -> dict[str, str]:
+        inline_ocr_text: dict[str, str] = {}
+        for block in document.blocks:
+            placeholder_token = block.metadata.get("placeholder_token")
+            if isinstance(placeholder_token, str):
+                inline_ocr_text[placeholder_token] = (block.text or "").strip()
+        return inline_ocr_text
+
+    def _resolve_inline_placeholders(
+        self,
+        text: str,
+        inline_ocr_text: dict[str, str],
+    ) -> str:
+        resolved_text = text
+        for placeholder_token, ocr_text in inline_ocr_text.items():
+            resolved_text = resolved_text.replace(placeholder_token, ocr_text)
+        return re.sub(r"\[IMAGE_OCR_\d+\]", "", resolved_text)

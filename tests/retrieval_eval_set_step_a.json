@@ -3,12 +3,90 @@
     "case_id": "HR-001",
     "query": "人事管理制度适用于哪些人",
     "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第二条"
+    "expected_section_title": "第二条",
+    "policy_category": "管理制度",
+    "question_type": "适用范围",
+    "tags": ["总则", "适用范围", "对象"],
+    "notes": "验证适用对象类问题的条款召回。"
   },
   {
     "case_id": "HR-002",
     "query": "员工试用期多久",
     "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第五条"
+    "expected_section_title": "第五条",
+    "policy_category": "管理制度",
+    "question_type": "时效",
+    "tags": ["录用", "试用期", "时长"],
+    "notes": "验证试用期限类问题的稳定命中。"
+  },
+  {
+    "case_id": "HR-003",
+    "query": "工资什么时候发",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第十九条",
+    "policy_category": "管理制度",
+    "question_type": "时效",
+    "tags": ["待遇", "工资", "发放时间"],
+    "notes": "验证薪酬发放时间类问题。"
+  },
+  {
+    "case_id": "HR-004",
+    "query": "法定节假日加班工资怎么算",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第二十七条",
+    "policy_category": "管理制度",
+    "question_type": "计算规则",
+    "tags": ["加班", "节假日", "薪资计算"],
+    "notes": "验证带数值规则的问题能否命中加班条款。"
+  },
+  {
+    "case_id": "HR-005",
+    "query": "员工出差回来后要做什么",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第三十三条",
+    "policy_category": "管理制度",
+    "question_type": "流程",
+    "tags": ["出差", "流程", "报销"],
+    "notes": "验证流程动作类问题。"
+  },
+  {
+    "case_id": "HR-006",
+    "query": "员工可以私自复印公司文件吗",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第四十六条",
+    "policy_category": "管理制度",
+    "question_type": "禁止性规定",
+    "tags": ["保密", "文件", "复印"],
+    "notes": "验证否定约束类问题。"
+  },
+  {
+    "case_id": "HR-007",
+    "query": "员工多久考核一次",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第四十九条",
+    "policy_category": "管理制度",
+    "question_type": "频次",
+    "tags": ["考核", "频次", "试用期"],
+    "notes": "验证频次和条件混合的规则条款。"
+  },
+  {
+    "case_id": "HR-008",
+    "query": "什么情况下员工会被表彰",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第五十四条",
+    "policy_category": "管理制度",
+    "question_type": "条件",
+    "tags": ["奖惩", "表彰", "条件"],
+    "notes": "验证奖励条件类问题。"
+  },
+  {
+    "case_id": "HR-009",
+    "query": "员工有哪些行为会被除名",
+    "expected_document_name": "6、示例公司人事管理制度",
+    "expected_section_title": "第六十条",
+    "policy_category": "管理制度",
+    "question_type": "条件",
+    "tags": ["奖惩", "除名", "违规"],
+    "notes": "验证严重处罚类问题。"
   }
 ]

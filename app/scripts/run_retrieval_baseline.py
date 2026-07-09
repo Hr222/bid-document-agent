@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
@@ -17,6 +18,20 @@ from app.services.retrieval.vector_search import (
 
 
 DEFAULT_BENCHMARK_STRATEGIES: tuple[VectorSearchStrategyName, ...] = ("exact", "hnsw")
+
+
+@dataclass(slots=True, frozen=True)
+class EvalCaseDefinition:
+    """定义单条检索评测样本。"""
+
+    case_id: str
+    query: str
+    expected_document_name: str
+    expected_section_title: str
+    policy_category: str
+    question_type: str
+    tags: tuple[str, ...] = ()
+    notes: str | None = None
 
 
 @dataclass(slots=True)
@@ -55,6 +70,10 @@ class BenchmarkCaseResult:
     expected_document_name: str
     expected_section_title: str
     strategy_results: dict[VectorSearchStrategyName, StrategyCaseResult]
+    policy_category: str = "未分类"
+    question_type: str = "未分类"
+    tags: tuple[str, ...] = ()
+    notes: str | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -89,10 +108,64 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_eval_cases(eval_path: Path) -> list[dict]:
-    """读取最小评测集定义。"""
+def load_eval_cases(eval_path: Path) -> list[EvalCaseDefinition]:
+    """读取并校验检索评测集定义。"""
 
-    return json.loads(eval_path.read_text(encoding="utf-8"))
+    payload = json.loads(eval_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("评测集文件必须是 JSON 数组。")
+
+    cases: list[EvalCaseDefinition] = []
+    seen_case_ids: set[str] = set()
+    for index, raw_case in enumerate(payload, start=1):
+        if not isinstance(raw_case, dict):
+            raise ValueError(f"第 {index} 条评测样本必须是对象。")
+
+        def read_required_text(field_name: str) -> str:
+            value = raw_case.get(field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"第 {index} 条评测样本缺少有效字段：{field_name}")
+            return value.strip()
+
+        case_id = read_required_text("case_id")
+        if case_id in seen_case_ids:
+            raise ValueError(f"评测集存在重复 case_id：{case_id}")
+        seen_case_ids.add(case_id)
+
+        raw_tags = raw_case.get("tags", [])
+        if raw_tags is None:
+            raw_tags = []
+        if not isinstance(raw_tags, list):
+            raise ValueError(f"第 {index} 条评测样本的 tags 必须是字符串数组。")
+
+        tags: list[str] = []
+        seen_tags: set[str] = set()
+        for raw_tag in raw_tags:
+            if not isinstance(raw_tag, str) or not raw_tag.strip():
+                raise ValueError(f"第 {index} 条评测样本的 tags 必须是非空字符串。")
+            normalized_tag = raw_tag.strip()
+            if normalized_tag not in seen_tags:
+                tags.append(normalized_tag)
+                seen_tags.add(normalized_tag)
+
+        raw_notes = raw_case.get("notes")
+        if raw_notes is not None and (not isinstance(raw_notes, str) or not raw_notes.strip()):
+            raise ValueError(f"第 {index} 条评测样本的 notes 如果提供，必须是非空字符串。")
+
+        cases.append(
+            EvalCaseDefinition(
+                case_id=case_id,
+                query=read_required_text("query"),
+                expected_document_name=read_required_text("expected_document_name"),
+                expected_section_title=read_required_text("expected_section_title"),
+                policy_category=read_required_text("policy_category"),
+                question_type=read_required_text("question_type"),
+                tags=tuple(tags),
+                notes=raw_notes.strip() if isinstance(raw_notes, str) else None,
+            )
+        )
+
+    return cases
 
 
 def build_retrieval_service(
@@ -121,7 +194,7 @@ def run_single_case(
     *,
     service: KnowledgeRetrievalService,
     strategy_name: VectorSearchStrategyName,
-    case: dict,
+    case: EvalCaseDefinition,
     top_k: int,
 ) -> StrategyCaseResult:
     """执行单个评测问题，并输出指定策略的最小对比结果。"""
@@ -129,7 +202,7 @@ def run_single_case(
     started_at = perf_counter()
     response = service.search(
         RetrievalSearchRequest(
-            query=case["query"],
+            query=case.query,
             top_k=top_k,
         )
     )
@@ -156,21 +229,15 @@ def run_single_case(
         vector_trace_source=vector_trace.source if vector_trace else None,
         elapsed_ms=elapsed_ms,
         hit_count=len(response.hits),
-        top1_document_match=(
-            top1 is not None and top1.policy_name == case["expected_document_name"]
-        ),
-        top1_section_match=(
-            top1 is not None and top1.section_title == case["expected_section_title"]
-        ),
-        top3_section_match=any(
-            hit.section_title == case["expected_section_title"] for hit in top3
-        ),
+        top1_document_match=(top1 is not None and top1.policy_name == case.expected_document_name),
+        top1_section_match=(top1 is not None and top1.section_title == case.expected_section_title),
+        top3_section_match=any(hit.section_title == case.expected_section_title for hit in top3),
         top_hits=top_hits,
     )
 
 
 def run_benchmark(
-    eval_cases: list[dict],
+    eval_cases: list[EvalCaseDefinition],
     *,
     strategies: list[VectorSearchStrategyName],
     top_k: int,
@@ -201,10 +268,14 @@ def run_benchmark(
 
             results.append(
                 BenchmarkCaseResult(
-                    case_id=case["case_id"],
-                    query=case["query"],
-                    expected_document_name=case["expected_document_name"],
-                    expected_section_title=case["expected_section_title"],
+                    case_id=case.case_id,
+                    query=case.query,
+                    expected_document_name=case.expected_document_name,
+                    expected_section_title=case.expected_section_title,
+                    policy_category=case.policy_category,
+                    question_type=case.question_type,
+                    tags=case.tags,
+                    notes=case.notes,
                     strategy_results=strategy_results,
                 )
             )
@@ -332,10 +403,30 @@ def build_comparison_summary(
     }
 
 
+def build_eval_set_summary(
+    eval_cases: list[EvalCaseDefinition],
+) -> dict[str, int | dict[str, int]]:
+    """汇总评测集覆盖面，便于观察样本是否仍然过于集中。"""
+
+    policy_category_counts = Counter(case.policy_category for case in eval_cases)
+    question_type_counts = Counter(case.question_type for case in eval_cases)
+    document_counts = Counter(case.expected_document_name for case in eval_cases)
+    tag_counts = Counter(tag for case in eval_cases for tag in case.tags)
+
+    return {
+        "total_cases": len(eval_cases),
+        "distinct_document_count": len(document_counts),
+        "policy_category_counts": dict(sorted(policy_category_counts.items())),
+        "question_type_counts": dict(sorted(question_type_counts.items())),
+        "tag_counts": dict(sorted(tag_counts.items())),
+    }
+
+
 def build_output(
     *,
     project_root: Path,
     eval_path: Path,
+    eval_cases: list[EvalCaseDefinition],
     strategies: list[VectorSearchStrategyName],
     top_k: int,
     results: list[BenchmarkCaseResult],
@@ -344,6 +435,7 @@ def build_output(
 
     output = {
         "eval_set_file": str(eval_path.relative_to(project_root)).replace("\\", "/"),
+        "eval_set_summary": build_eval_set_summary(eval_cases),
         "top_k": top_k,
         "strategies": strategies,
         "strategy_summaries": {
@@ -386,6 +478,7 @@ def main() -> None:
     output = build_output(
         project_root=project_root,
         eval_path=eval_path,
+        eval_cases=eval_cases,
         strategies=args.strategies,
         top_k=args.top_k,
         results=results,
