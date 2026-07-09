@@ -18,6 +18,7 @@ KB_SCHEMA_SETUP_GUIDE = (
     "知识库数据表尚未初始化。请先执行 sql/001_kb_policy_schema.sql，"
     "如需确认 embedding 维度，再执行 sql/002_kb_policy_chunk_embedding_dimension_1024.sql，"
     "如已接入 block/OCR 流程，还需要执行 sql/003_kb_policy_block.sql。"
+    "如需启用 HNSW 向量索引，再执行 sql/004_kb_policy_chunk_embedding_hnsw.sql。"
 )
 
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models import (
     PolicyBlock,
     PolicyChunk,
@@ -205,66 +206,14 @@ class PolicyRepository:
         document_id: int | None = None,
         include_history: bool = False,
     ) -> list[RetrievedPolicyChunk]:
-        distance_expr = PolicyChunk.embedding.cosine_distance(query_embedding)
-
-        statement = (
-            select(
-                PolicyDocument.id.label("document_id"),
-                PolicyVersion.id.label("version_id"),
-                PolicyChunk.id.label("chunk_id"),
-                PolicyDocument.policy_name.label("policy_name"),
-                PolicyDocument.policy_category.label("policy_category"),
-                PolicyDocument.responsible_department.label("responsible_department"),
-                PolicyVersion.version_label.label("version_label"),
-                PolicySection.section_title.label("section_title"),
-                PolicySection.section_path.label("section_path"),
-                PolicyChunk.page_no.label("page_no"),
-                PolicyChunk.chunk_text.label("chunk_text"),
-                distance_expr.label("distance"),
-            )
-            .join(PolicyVersion, PolicyVersion.id == PolicyChunk.version_id)
-            .join(PolicyDocument, PolicyDocument.id == PolicyVersion.policy_id)
-            .outerjoin(PolicySection, PolicySection.id == PolicyChunk.section_id)
-            .where(PolicyVersion.version_status.in_(("draft", "approved", "active")))
+        return self._search_chunks_by_vector_distance(
+            query_embedding=query_embedding,
+            top_k=top_k,
+            policy_category=policy_category,
+            responsible_department=responsible_department,
+            document_id=document_id,
+            include_history=include_history,
         )
-
-        if not include_history:
-            statement = statement.where(PolicyDocument.latest_version_id == PolicyVersion.id)
-        if policy_category:
-            statement = statement.where(PolicyDocument.policy_category == policy_category)
-        if responsible_department:
-            statement = statement.where(
-                PolicyDocument.responsible_department == responsible_department
-            )
-        if document_id is not None:
-            statement = statement.where(PolicyDocument.id == document_id)
-
-        rows = self.session.execute(statement.order_by(distance_expr.asc()).limit(top_k)).all()
-
-        results: list[RetrievedPolicyChunk] = []
-        for row in rows:
-            distance = float(row.distance)
-            score = max(0.0, 1.0 - distance)
-            results.append(
-                RetrievedPolicyChunk(
-                    document_id=row.document_id,
-                    version_id=row.version_id,
-                    chunk_id=row.chunk_id,
-                    policy_name=row.policy_name,
-                    policy_category=row.policy_category,
-                    responsible_department=row.responsible_department,
-                    version_label=row.version_label,
-                    section_title=row.section_title,
-                    section_path=row.section_path,
-                    page_no=row.page_no,
-                    chunk_text=row.chunk_text,
-                    score=score,
-                    retrieval_source="vector",
-                    score_breakdown={"vector": score},
-                    debug_details={},
-                )
-            )
-        return results
 
     def search_chunks_hnsw(
         self,
@@ -276,8 +225,23 @@ class PolicyRepository:
         document_id: int | None = None,
         include_history: bool = False,
     ) -> list[RetrievedPolicyChunk]:
-        raise NotImplementedError(
-            "HNSW 向量检索尚未接入；当前阶段仅支持 exact，待 Milestone C Step C3 落地。"
+        # 对当前事务局部设置 ef_search，避免把实验参数写死在 SQL 或全局会话里。
+        self.session.execute(
+            select(
+                func.set_config(
+                    "hnsw.ef_search",
+                    str(settings.vector_search_hnsw_ef_search),
+                    True,
+                )
+            )
+        )
+        return self._search_chunks_by_vector_distance(
+            query_embedding=query_embedding,
+            top_k=top_k,
+            policy_category=policy_category,
+            responsible_department=responsible_department,
+            document_id=document_id,
+            include_history=include_history,
         )
 
     def search_chunks_by_keywords(
@@ -409,6 +373,79 @@ class PolicyRepository:
                     retrieval_source="keyword",
                     score_breakdown={"keyword": score},
                     debug_details=debug_details,
+                )
+            )
+        return results
+
+    def _search_chunks_by_vector_distance(
+        self,
+        *,
+        query_embedding: list[float],
+        top_k: int,
+        policy_category: str | None,
+        responsible_department: str | None,
+        document_id: int | None,
+        include_history: bool,
+    ) -> list[RetrievedPolicyChunk]:
+        distance_expr = PolicyChunk.embedding.cosine_distance(query_embedding)
+
+        statement = (
+            select(
+                PolicyDocument.id.label("document_id"),
+                PolicyVersion.id.label("version_id"),
+                PolicyChunk.id.label("chunk_id"),
+                PolicyDocument.policy_name.label("policy_name"),
+                PolicyDocument.policy_category.label("policy_category"),
+                PolicyDocument.responsible_department.label("responsible_department"),
+                PolicyVersion.version_label.label("version_label"),
+                PolicySection.section_title.label("section_title"),
+                PolicySection.section_path.label("section_path"),
+                PolicyChunk.page_no.label("page_no"),
+                PolicyChunk.chunk_text.label("chunk_text"),
+                distance_expr.label("distance"),
+            )
+            .join(PolicyVersion, PolicyVersion.id == PolicyChunk.version_id)
+            .join(PolicyDocument, PolicyDocument.id == PolicyVersion.policy_id)
+            .outerjoin(PolicySection, PolicySection.id == PolicyChunk.section_id)
+            .where(PolicyVersion.version_status.in_(("draft", "approved", "active")))
+        )
+
+        if not include_history:
+            statement = statement.where(PolicyDocument.latest_version_id == PolicyVersion.id)
+        if policy_category:
+            statement = statement.where(PolicyDocument.policy_category == policy_category)
+        if responsible_department:
+            statement = statement.where(
+                PolicyDocument.responsible_department == responsible_department
+            )
+        if document_id is not None:
+            statement = statement.where(PolicyDocument.id == document_id)
+
+        rows = self.session.execute(statement.order_by(distance_expr.asc()).limit(top_k)).all()
+        return self._build_vector_search_results(rows)
+
+    def _build_vector_search_results(self, rows: list) -> list[RetrievedPolicyChunk]:
+        results: list[RetrievedPolicyChunk] = []
+        for row in rows:
+            distance = float(row.distance)
+            score = max(0.0, 1.0 - distance)
+            results.append(
+                RetrievedPolicyChunk(
+                    document_id=row.document_id,
+                    version_id=row.version_id,
+                    chunk_id=row.chunk_id,
+                    policy_name=row.policy_name,
+                    policy_category=row.policy_category,
+                    responsible_department=row.responsible_department,
+                    version_label=row.version_label,
+                    section_title=row.section_title,
+                    section_path=row.section_path,
+                    page_no=row.page_no,
+                    chunk_text=row.chunk_text,
+                    score=score,
+                    retrieval_source="vector",
+                    score_breakdown={"vector": score},
+                    debug_details={},
                 )
             )
         return results

@@ -84,3 +84,29 @@ def test_pipeline_uses_exact_vector_strategy_from_settings(monkeypatch) -> None:
     vector_trace = next(trace for trace in result.traces if trace.name == "vector_recall")
     assert vector_trace.source == "pgvector_cosine_exact"
     assert vector_trace.details["strategy"] == "exact"
+
+
+def test_pipeline_uses_hnsw_vector_strategy_from_settings(monkeypatch) -> None:
+    original_strategy = settings.vector_search_strategy
+    monkeypatch.setattr(settings, "vector_search_strategy", "hnsw")
+    repository = TrackingRepository()
+
+    try:
+        pipeline = HybridRetrievalPipeline(
+            repository=repository,
+            embedding_service=StubEmbeddingService(),
+        )
+        result = pipeline.run(
+            RetrievalSearchRequest(
+                query="人事管理制度适用于哪些人",
+                top_k=3,
+            )
+        )
+    finally:
+        monkeypatch.setattr(settings, "vector_search_strategy", original_strategy)
+
+    assert repository.called_strategy == "hnsw"
+    assert result.strategy == "hybrid-vector-keyword/hnsw"
+    vector_trace = next(trace for trace in result.traces if trace.name == "vector_recall")
+    assert vector_trace.source == "pgvector_hnsw"
+    assert vector_trace.details["strategy"] == "hnsw"

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     retrieval_top_k_max: int = 20
     retrieval_min_score: float = 0.45
     vector_search_strategy: Literal["exact", "hnsw"] = "exact"
+    vector_search_hnsw_m: int = 16
+    vector_search_hnsw_ef_construction: int = 64
+    vector_search_hnsw_ef_search: int = 40
     rag_answer_top_k: int = 6
     rag_max_context_chars_per_chunk: int = 500
     ocr_enabled: bool = True
