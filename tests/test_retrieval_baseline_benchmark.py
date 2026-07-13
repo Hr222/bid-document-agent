@@ -34,6 +34,8 @@ def make_strategy_case_result(
         vector_trace_source=f"source-{strategy}",
         elapsed_ms=elapsed_ms,
         hit_count=hit_count,
+        expected_document_rank=1 if top1_document_match else None,
+        expected_section_rank=1 if top1_section_match else None,
         top1_document_match=top1_document_match,
         top1_section_match=top1_section_match,
         top3_section_match=top3_section_match,
@@ -98,6 +100,7 @@ def test_build_strategy_summary_aggregates_counts_and_latency() -> None:
     assert summary == {
         "total_cases": 2,
         "top1_document_match_count": 1,
+        "document_hit_at_3_count": 1,
         "top1_section_match_count": 1,
         "top3_section_match_count": 1,
         "zero_hit_count": 1,
@@ -293,3 +296,36 @@ def test_build_eval_set_summary_counts_categories_question_types_and_tags() -> N
             "适用范围": 1,
         },
     }
+
+
+def test_section_match_requires_expected_document_not_just_same_section_title() -> None:
+    results = [
+        BenchmarkCaseResult(
+            case_id="case-1",
+            query="适用于哪些人",
+            expected_document_name="6、示例公司人事管理制度",
+            expected_section_title="第二条",
+            strategy_results={
+                "exact": StrategyCaseResult(
+                    strategy="exact",
+                    pipeline_strategy="hybrid-vector-keyword/exact",
+                    vector_trace_source="pgvector_cosine_exact",
+                    elapsed_ms=12.0,
+                    hit_count=3,
+                    expected_document_rank=2,
+                    expected_section_rank=None,
+                    top1_document_match=False,
+                    top1_section_match=False,
+                    top3_section_match=False,
+                    top_hits=[],
+                )
+            },
+        )
+    ]
+
+    summary = build_strategy_summary(results, "exact")
+
+    assert summary["top1_document_match_count"] == 0
+    assert summary["document_hit_at_3_count"] == 1
+    assert summary["top1_section_match_count"] == 0
+    assert summary["top3_section_match_count"] == 0

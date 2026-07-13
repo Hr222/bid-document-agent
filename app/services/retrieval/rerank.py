@@ -15,7 +15,7 @@ class HeuristicRetrievalReranker:
         self,
         *,
         query_policy: PolicyRetrievalQueryPolicy,
-        base_weight: float = 0.6,
+        base_weight: float = 1.0,
         signal_weight: float = 0.4,
     ) -> None:
         self.query_policy = query_policy
@@ -32,26 +32,29 @@ class HeuristicRetrievalReranker:
         if not hits:
             return []
 
-        # rerank 只处理“候选已召回，但顺序还不够准”的问题，因此只做增量重排。
         reranked_hits: list[RetrievedPolicyChunk] = []
         normalized_query = self.query_policy.normalize_query(query)
         for hit in hits:
-            rerank_score, rerank_details = self._compute_rerank_signal(
+            rerank_score, coverage_ratio, rerank_details = self._compute_rerank_signal(
                 hit=hit,
                 normalized_query=normalized_query,
                 keyword_plan=keyword_plan,
             )
+            final_score = min(
+                1.0,
+                max(
+                    0.0,
+                    hit.score * self.base_weight + rerank_score * self.signal_weight,
+                ),
+            )
             reranked_hits.append(
                 replace(
                     hit,
-                    score=round(
-                        hit.score * self.base_weight
-                        + rerank_score * self.signal_weight,
-                        6,
-                    ),
+                    score=round(final_score, 6),
                     score_breakdown={
                         **hit.score_breakdown,
                         "rerank": rerank_score,
+                        "coverage": coverage_ratio,
                     },
                     debug_details={
                         **hit.debug_details,
@@ -79,7 +82,6 @@ class HeuristicRetrievalReranker:
         before_hits: list[RetrievedPolicyChunk],
         after_hits: list[RetrievedPolicyChunk],
     ) -> dict[str, str | int | float | bool | None]:
-        # rerank 阶段需要解释“为什么顺序变了”，因此记录前后名次与命中原因。
         details: dict[str, str | int | float | bool | None] = {
             "query": query,
             "focus_query": keyword_plan.focus_query or None,
@@ -120,8 +122,7 @@ class HeuristicRetrievalReranker:
         hit: RetrievedPolicyChunk,
         normalized_query: str,
         keyword_plan: RetrievalKeywordPlan,
-    ) -> tuple[float, dict[str, str | int | float | bool | None]]:
-        # 先把不同字段统一归一化，后续所有 rerank 判断都只基于归一化文本进行。
+    ) -> tuple[float, float, dict[str, str | int | float | bool | None]]:
         normalized_chunk_text = self.query_policy.normalize_query(hit.chunk_text)
         normalized_policy_name = self.query_policy.normalize_query(hit.policy_name)
         normalized_section_title = self.query_policy.normalize_query(hit.section_title or "")
@@ -130,10 +131,24 @@ class HeuristicRetrievalReranker:
         score = 0.0
         matched_fields: list[str] = []
         matched_keywords: list[str] = []
+        matched_anchor_keywords: list[str] = []
+        missing_required_keywords: list[str] = []
+        term_weight_map = self._build_term_weight_map(keyword_plan)
 
         def append_field(field_name: str) -> None:
             if field_name not in matched_fields:
                 matched_fields.append(field_name)
+
+        def matches_any_field(term: str) -> bool:
+            return any(
+                term in field_value
+                for field_value in (
+                    normalized_chunk_text,
+                    normalized_section_title,
+                    normalized_section_path,
+                    normalized_policy_name,
+                )
+            )
 
         def add_match(
             term: str,
@@ -177,7 +192,6 @@ class HeuristicRetrievalReranker:
             )
 
         if keyword_plan.focus_query:
-            # focus_query 是去掉问句外壳后的核心表达，优先级高于一般关键词。
             add_match(
                 keyword_plan.focus_query,
                 chunk_weight=0.32,
@@ -187,7 +201,6 @@ class HeuristicRetrievalReranker:
             )
             focus_position = normalized_chunk_text.find(keyword_plan.focus_query)
             if 0 <= focus_position <= 24:
-                # 关键词出现在文本前部时，通常更可能是直接回答问题的条款。
                 score += 0.08
             for priority_term in self._build_priority_terms(keyword_plan.focus_query):
                 if len(priority_term) >= 3:
@@ -207,7 +220,35 @@ class HeuristicRetrievalReranker:
                         policy_name_weight=0.0,
                     )
 
+        for keyword in keyword_plan.anchor_keywords:
+            add_match(
+                keyword,
+                chunk_weight=0.16 if len(keyword) >= 4 else 0.12,
+                section_title_weight=0.09 if len(keyword) >= 4 else 0.06,
+                section_path_weight=0.06 if len(keyword) >= 4 else 0.04,
+                policy_name_weight=0.04 if len(keyword) >= 4 else 0.02,
+            )
+            if matches_any_field(keyword) and keyword not in matched_anchor_keywords:
+                matched_anchor_keywords.append(keyword)
+
+        anchor_keyword_set = set(keyword_plan.anchor_keywords)
+        priority_keyword_set = set(keyword_plan.priority_keywords)
+        for keyword in keyword_plan.priority_keywords:
+            if keyword in anchor_keyword_set:
+                continue
+            add_match(
+                keyword,
+                chunk_weight=0.14,
+                section_title_weight=0.08,
+                section_path_weight=0.05,
+                policy_name_weight=0.10,
+            )
+            if not matches_any_field(keyword) and self._is_required_priority_keyword(keyword):
+                missing_required_keywords.append(keyword)
+
         for keyword in keyword_plan.keywords:
+            if keyword in priority_keyword_set:
+                continue
             if len(keyword) >= 4:
                 add_match(
                     keyword,
@@ -234,20 +275,38 @@ class HeuristicRetrievalReranker:
                 )
 
         if matched_keywords:
-            # 命中的关键词越多，通常越接近问题主旨，但加成需要上限避免覆盖融合分。
             score += min(
                 0.18,
                 len(matched_keywords) / max(1, min(6, len(keyword_plan.keywords))) * 0.18,
             )
 
-        rerank_score = round(min(1.0, score), 6)
-        return rerank_score, {
+        matched_weight = sum(term_weight_map.get(term, 0.0) for term in matched_keywords)
+        total_weight = max(1.0, sum(term_weight_map.values()))
+        coverage_ratio = round(min(1.0, matched_weight / total_weight), 6)
+        score += min(0.2, coverage_ratio * 0.2)
+
+        anchor_match_ratio = 0.0
+        if keyword_plan.anchor_keywords:
+            anchor_match_ratio = round(
+                len(matched_anchor_keywords) / len(keyword_plan.anchor_keywords),
+                6,
+            )
+            score += min(0.14, anchor_match_ratio * 0.14)
+
+        if missing_required_keywords and not matched_anchor_keywords:
+            score -= min(0.12, len(missing_required_keywords) * 0.04)
+
+        rerank_score = round(min(1.0, max(0.0, score)), 6)
+        return rerank_score, coverage_ratio, {
             "rerank_matched_fields": ", ".join(matched_fields) or None,
             "rerank_matched_keywords": ", ".join(matched_keywords[:8]) or None,
+            "rerank_matched_anchor_keywords": ", ".join(matched_anchor_keywords[:6]) or None,
+            "rerank_missing_required_keywords": ", ".join(missing_required_keywords[:6]) or None,
+            "rerank_anchor_match_ratio": anchor_match_ratio,
+            "rerank_coverage_ratio": coverage_ratio,
         }
 
     def _build_priority_terms(self, focus_query: str) -> list[str]:
-        # 当前只取 focus_query 尾部的 4/3/2 字符片段，强化“适用人/试用期”等短语末尾语义。
         priority_terms: list[str] = []
         normalized_focus_query = self.query_policy.normalize_query(focus_query)
         for size in (4, 3, 2):
@@ -259,3 +318,38 @@ class HeuristicRetrievalReranker:
             if term not in priority_terms:
                 priority_terms.append(term)
         return priority_terms
+
+    def _is_required_priority_keyword(self, keyword: str) -> bool:
+        return any(char.isdigit() for char in keyword)
+
+    def _build_term_weight_map(
+        self,
+        keyword_plan: RetrievalKeywordPlan,
+    ) -> dict[str, float]:
+        weights: dict[str, float] = {}
+
+        if keyword_plan.focus_query:
+            weights[keyword_plan.focus_query] = max(
+                weights.get(keyword_plan.focus_query, 0.0),
+                1.8 if len(keyword_plan.focus_query) >= 4 else 1.2,
+            )
+
+        for keyword in keyword_plan.priority_keywords:
+            weights[keyword] = max(
+                weights.get(keyword, 0.0),
+                1.6 if len(keyword) >= 6 else 1.3,
+            )
+
+        for keyword in keyword_plan.anchor_keywords:
+            weights[keyword] = max(
+                weights.get(keyword, 0.0),
+                1.8 if len(keyword) >= 4 else 1.2,
+            )
+
+        for keyword in keyword_plan.keywords:
+            weights[keyword] = max(
+                weights.get(keyword, 0.0),
+                1.0 if len(keyword) >= 4 else 0.6,
+            )
+
+        return weights

@@ -69,6 +69,7 @@ class HybridRetrievalPipeline:
         keyword_hits = self.repository.search_chunks_by_keywords(
             focus_query=keyword_plan.focus_query,
             keywords=keyword_plan.keywords,
+            priority_keywords=keyword_plan.priority_keywords,
             top_k=per_source_top_k,
             policy_category=request.policy_category,
             responsible_department=request.responsible_department,
@@ -85,9 +86,17 @@ class HybridRetrievalPipeline:
             hits=fused_hits,
         )
         # 阈值过滤放在融合与重排之后执行，避免单路低分但双路一致命中的结果被过早丢掉。
-        filtered_hits = [
-            item for item in reranked_hits if item.score >= settings.retrieval_min_score
-        ][: request.top_k]
+        rescued_hit_count = 0
+        filtered_hits: list[RetrievedPolicyChunk] = []
+        for item in reranked_hits:
+            if item.score >= settings.retrieval_min_score:
+                filtered_hits.append(item)
+            elif self._passes_evidence_gate(item):
+                rescued_hit_count += 1
+                filtered_hits.append(item)
+
+            if len(filtered_hits) >= request.top_k:
+                break
 
         traces = [
             RetrievalStageTrace(
@@ -150,7 +159,12 @@ class HybridRetrievalPipeline:
                 source="min_score_threshold",
                 input_count=len(reranked_hits),
                 output_count=len(filtered_hits),
-                details={"min_score": settings.retrieval_min_score},
+                details={
+                    "min_score": settings.retrieval_min_score,
+                    "evidence_min_coverage": settings.retrieval_evidence_min_coverage,
+                    "evidence_rescue_margin": settings.retrieval_evidence_rescue_margin,
+                    "rescued_hit_count": rescued_hit_count,
+                },
             ),
         ]
 
@@ -173,7 +187,11 @@ class HybridRetrievalPipeline:
             "top_k": per_source_top_k,
             "focus_query": keyword_plan.focus_query or None,
             "keyword_count": len(keyword_plan.keywords),
+            "priority_keyword_count": len(keyword_plan.priority_keywords),
+            "anchor_keyword_count": len(keyword_plan.anchor_keywords),
             "keywords_preview": ", ".join(keyword_plan.keywords[:6]) or None,
+            "priority_keywords_preview": ", ".join(keyword_plan.priority_keywords[:6]) or None,
+            "anchor_keywords_preview": ", ".join(keyword_plan.anchor_keywords[:6]) or None,
         }
 
         # MVP 阶段先把前三条关键词命中的原因压缩成字符串，方便人工观察效果。
@@ -227,6 +245,23 @@ class HybridRetrievalPipeline:
             query=query,
             keyword_plan=keyword_plan,
             hits=hits,
+        )
+
+    def _passes_evidence_gate(self, hit: RetrievedPolicyChunk) -> bool:
+        if hit.retrieval_source == "vector":
+            return False
+
+        score_floor = settings.retrieval_min_score - settings.retrieval_evidence_rescue_margin
+        if hit.score < score_floor:
+            return False
+
+        coverage_ratio = hit.score_breakdown.get("coverage", 0.0)
+        rerank_score = hit.score_breakdown.get("rerank", 0.0)
+        keyword_score = hit.score_breakdown.get("keyword", 0.0)
+
+        return (
+            coverage_ratio >= settings.retrieval_evidence_min_coverage
+            and max(rerank_score, keyword_score) >= 0.12
         )
 
 

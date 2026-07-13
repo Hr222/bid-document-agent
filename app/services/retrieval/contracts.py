@@ -46,6 +46,7 @@ class RetrievalRepository(Protocol):
         *,
         focus_query: str | None,
         keywords: list[str],
+        priority_keywords: list[str] | None = None,
         top_k: int,
         policy_category: str | None = None,
         responsible_department: str | None = None,

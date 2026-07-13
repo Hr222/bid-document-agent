@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     retrieval_top_k_default: int = 5
     retrieval_top_k_max: int = 20
     retrieval_min_score: float = 0.45
+    retrieval_evidence_min_coverage: float = 0.15
+    retrieval_evidence_rescue_margin: float = 0.04
     vector_search_strategy: Literal["exact", "hnsw"] = "exact"
     vector_search_hnsw_m: int = 16
     vector_search_hnsw_ef_construction: int = 64

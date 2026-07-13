@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -55,6 +56,8 @@ class StrategyCaseResult:
     vector_trace_source: str | None
     elapsed_ms: float
     hit_count: int
+    expected_document_rank: int | None
+    expected_section_rank: int | None
     top1_document_match: bool
     top1_section_match: bool
     top3_section_match: bool
@@ -190,6 +193,36 @@ def extract_vector_trace(
     return next((stage for stage in stages if stage.name == "vector_recall"), None)
 
 
+def normalize_policy_name(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = re.sub(r"^\d+[、，,\.\s]+", "", value.strip())
+    return re.sub(r"\s+", "", normalized)
+
+
+def normalize_section_label(value: str | None) -> str:
+    if not value:
+        return ""
+    return re.sub(r"\s+", "", value.strip())
+
+
+def is_same_document(actual_name: str | None, expected_name: str) -> bool:
+    return normalize_policy_name(actual_name) == normalize_policy_name(expected_name)
+
+
+def is_same_section(
+    *,
+    actual_document_name: str | None,
+    actual_section_title: str | None,
+    expected_document_name: str,
+    expected_section_title: str,
+) -> bool:
+    return is_same_document(actual_document_name, expected_document_name) and (
+        normalize_section_label(actual_section_title)
+        == normalize_section_label(expected_section_title)
+    )
+
+
 def run_single_case(
     *,
     service: KnowledgeRetrievalService,
@@ -222,6 +255,27 @@ def run_single_case(
     top1 = response.hits[0] if response.hits else None
     top3 = response.hits[:3]
     vector_trace = extract_vector_trace(response.debug.stages)
+    expected_document_rank = next(
+        (
+            hit.rank
+            for hit in response.hits
+            if is_same_document(hit.policy_name, case.expected_document_name)
+        ),
+        None,
+    )
+    expected_section_rank = next(
+        (
+            hit.rank
+            for hit in response.hits
+            if is_same_section(
+                actual_document_name=hit.policy_name,
+                actual_section_title=hit.section_title,
+                expected_document_name=case.expected_document_name,
+                expected_section_title=case.expected_section_title,
+            )
+        ),
+        None,
+    )
 
     return StrategyCaseResult(
         strategy=strategy_name,
@@ -229,9 +283,29 @@ def run_single_case(
         vector_trace_source=vector_trace.source if vector_trace else None,
         elapsed_ms=elapsed_ms,
         hit_count=len(response.hits),
-        top1_document_match=(top1 is not None and top1.policy_name == case.expected_document_name),
-        top1_section_match=(top1 is not None and top1.section_title == case.expected_section_title),
-        top3_section_match=any(hit.section_title == case.expected_section_title for hit in top3),
+        expected_document_rank=expected_document_rank,
+        expected_section_rank=expected_section_rank,
+        top1_document_match=(
+            top1 is not None and is_same_document(top1.policy_name, case.expected_document_name)
+        ),
+        top1_section_match=(
+            top1 is not None
+            and is_same_section(
+                actual_document_name=top1.policy_name,
+                actual_section_title=top1.section_title,
+                expected_document_name=case.expected_document_name,
+                expected_section_title=case.expected_section_title,
+            )
+        ),
+        top3_section_match=any(
+            is_same_section(
+                actual_document_name=hit.policy_name,
+                actual_section_title=hit.section_title,
+                expected_document_name=case.expected_document_name,
+                expected_section_title=case.expected_section_title,
+            )
+            for hit in top3
+        ),
         top_hits=top_hits,
     )
 
@@ -298,6 +372,7 @@ def build_strategy_summary(
         return {
             "total_cases": 0,
             "top1_document_match_count": 0,
+            "document_hit_at_3_count": 0,
             "top1_section_match_count": 0,
             "top3_section_match_count": 0,
             "zero_hit_count": 0,
@@ -308,6 +383,10 @@ def build_strategy_summary(
     return {
         "total_cases": total,
         "top1_document_match_count": sum(item.top1_document_match for item in strategy_results),
+        "document_hit_at_3_count": sum(
+            item.expected_document_rank is not None and item.expected_document_rank <= 3
+            for item in strategy_results
+        ),
         "top1_section_match_count": sum(item.top1_section_match for item in strategy_results),
         "top3_section_match_count": sum(item.top3_section_match for item in strategy_results),
         "zero_hit_count": sum(item.hit_count == 0 for item in strategy_results),

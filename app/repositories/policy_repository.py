@@ -249,6 +249,7 @@ class PolicyRepository:
         *,
         focus_query: str | None,
         keywords: list[str],
+        priority_keywords: list[str] | None = None,
         top_k: int,
         policy_category: str | None = None,
         responsible_department: str | None = None,
@@ -258,6 +259,10 @@ class PolicyRepository:
         # 关键词召回先走最小可用版本：不引入 BM25，仅基于命中位置做轻量打分。
         normalized_focus_query = (focus_query or "").strip().lower()
         normalized_keywords = [keyword.strip().lower() for keyword in keywords if keyword.strip()]
+        normalized_priority_keywords = [
+            keyword.strip().lower() for keyword in (priority_keywords or []) if keyword.strip()
+        ]
+        priority_keyword_set = set(normalized_priority_keywords)
         if not normalized_focus_query and not normalized_keywords:
             return []
 
@@ -289,7 +294,10 @@ class PolicyRepository:
 
         for keyword in normalized_keywords:
             # 词越长通常语义越完整，因此给更高权重；短词只保留较弱加分，避免噪声过大。
-            keyword_weights = self._resolve_keyword_weights(keyword)
+            keyword_weights = self._resolve_keyword_weights(
+                keyword,
+                is_priority=keyword in priority_keyword_set,
+            )
 
             raw_score_expr = raw_score_expr + case(
                 (chunk_text_expr.contains(keyword), keyword_weights["chunk_text"]),
@@ -355,6 +363,7 @@ class PolicyRepository:
                 section_path=row.section_path,
                 focus_query=normalized_focus_query,
                 keywords=normalized_keywords,
+                priority_keywords=normalized_priority_keywords,
             )
             results.append(
                 RetrievedPolicyChunk(
@@ -459,14 +468,17 @@ class PolicyRepository:
         section_path: str | None,
         focus_query: str,
         keywords: list[str],
+        priority_keywords: list[str],
     ) -> dict[str, str | int | float | bool | None]:
         lower_chunk_text = chunk_text.lower()
         lower_policy_name = policy_name.lower()
         lower_section_title = (section_title or "").lower()
         lower_section_path = (section_path or "").lower()
+        priority_keyword_set = set(priority_keywords)
 
         matched_fields: list[str] = []
         matched_keywords: list[str] = []
+        matched_priority_keywords: list[str] = []
         score_terms: list[str] = []
 
         def append_field(field_name: str) -> None:
@@ -488,7 +500,10 @@ class PolicyRepository:
                 score_terms.append(f"focus@section_path=0.15")
 
         for keyword in keywords:
-            keyword_weights = self._resolve_keyword_weights(keyword)
+            keyword_weights = self._resolve_keyword_weights(
+                keyword,
+                is_priority=keyword in priority_keyword_set,
+            )
             keyword_matched = False
             if keyword in lower_chunk_text:
                 append_field("chunk_text")
@@ -516,33 +531,47 @@ class PolicyRepository:
                 keyword_matched = True
             if keyword_matched and keyword not in matched_keywords:
                 matched_keywords.append(keyword)
+            if keyword_matched and keyword in priority_keyword_set and keyword not in matched_priority_keywords:
+                matched_priority_keywords.append(keyword)
 
         return {
             "matched_fields": ", ".join(matched_fields) or None,
             "matched_keywords": ", ".join(matched_keywords[:8]) or None,
+            "matched_priority_keywords": ", ".join(matched_priority_keywords[:8]) or None,
             "keyword_score_terms": "; ".join(score_terms[:10]) or None,
         }
 
-    def _resolve_keyword_weights(self, keyword: str) -> dict[str, float]:
+    def _resolve_keyword_weights(self, keyword: str, *, is_priority: bool = False) -> dict[str, float]:
         if len(keyword) >= 4:
-            return {
+            weights = {
                 "chunk_text": 0.28,
                 "policy_name": 0.18,
                 "section_title": 0.14,
                 "section_path": 0.10,
             }
-        if len(keyword) == 3:
-            return {
+        elif len(keyword) == 3:
+            weights = {
                 "chunk_text": 0.22,
                 "policy_name": 0.14,
                 "section_title": 0.12,
                 "section_path": 0.08,
             }
+        else:
+            weights = {
+                "chunk_text": 0.16,
+                "policy_name": 0.10,
+                "section_title": 0.08,
+                "section_path": 0.06,
+            }
+
+        if not is_priority:
+            return weights
+
         return {
-            "chunk_text": 0.16,
-            "policy_name": 0.10,
-            "section_title": 0.08,
-            "section_path": 0.06,
+            "chunk_text": round(min(0.42, weights["chunk_text"] + 0.08), 3),
+            "policy_name": round(min(0.30, weights["policy_name"] + 0.08), 3),
+            "section_title": round(min(0.24, weights["section_title"] + 0.05), 3),
+            "section_path": round(min(0.20, weights["section_path"] + 0.04), 3),
         }
 
     def _get_or_create_document(
