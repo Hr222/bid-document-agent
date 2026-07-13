@@ -49,6 +49,12 @@ from app.schemas.policy_pipeline_content import (
 
 # 流水线最终响应 Schema
 from app.schemas.policy_pipeline_response import PolicyPipelineResponse
+from app.schemas.policy_decision import (
+    PolicyDecisionChecklistRequest,
+    PolicyDecisionChecklistResponse,
+    PolicyDecisionDebugInfo,
+    PolicyDecisionRequirementStatus,
+)
 from app.schemas.retrieval import (
     AnswerCitation,
     RagAskRequest,
@@ -94,6 +100,10 @@ __all__ = [
     "ChunkSampleItem",
     "ChunkSplitResult",
     "PolicyPipelineResponse",
+    "PolicyDecisionChecklistRequest",
+    "PolicyDecisionChecklistResponse",
+    "PolicyDecisionDebugInfo",
+    "PolicyDecisionRequirementStatus",
     "RetrievalSearchRequest",
     "RetrievalFilters",
     "RetrievalHit",

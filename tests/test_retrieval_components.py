@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.repositories.policy_repository import RetrievedPolicyChunk
 from app.services.retrieval import HybridHitFusionService, HybridRetrievalPipeline
-from app.services.retrieval_pipeline import HybridRetrievalPipeline as CompatPipeline
 
 
 def _hit(
@@ -39,7 +38,6 @@ def _hit(
 
 
 def test_fusion_service_merges_duplicate_hits_and_keeps_breakdown() -> None:
-    # 融合职责应只关心双路结果归并，不掺杂 query 解析和 rerank 逻辑。
     fusion_service = HybridHitFusionService()
 
     merged_hits = fusion_service.merge_hits(
@@ -75,6 +73,5 @@ def test_fusion_service_merges_duplicate_hits_and_keeps_breakdown() -> None:
     }
 
 
-def test_legacy_retrieval_pipeline_module_keeps_compatibility_export() -> None:
-    # 旧模块路径仍然可用，避免 API、脚本或测试因为职责拆分而中断。
-    assert CompatPipeline is HybridRetrievalPipeline
+def test_retrieval_pipeline_is_exposed_from_retrieval_package() -> None:
+    assert HybridRetrievalPipeline.__name__ == "HybridRetrievalPipeline"

@@ -5,6 +5,17 @@
 这一层只关心业务判断，不直接操作数据库，也不直接定义 API 请求/响应结构。
 """
 
+from app.domain.policy.checklist import (
+    COURT_EVALUATION_MATERIALS_SCENARIO,
+    ChecklistEvaluationResult,
+    ChecklistRequirementComponent,
+    ChecklistRequirementDecision,
+    ChecklistRequirementDefinition,
+    ChecklistRequirementEvidence,
+    ChecklistRulePack,
+    ChecklistScenarioDefinition,
+    RuleDrivenChecklistPolicy,
+)
 from app.domain.policy.rules import (
     PolicyChunkingPolicy,
     PolicyIdentityPolicy,
@@ -16,6 +27,14 @@ from app.domain.policy.rules import (
 )
 
 __all__ = [
+    "COURT_EVALUATION_MATERIALS_SCENARIO",
+    "ChecklistEvaluationResult",
+    "ChecklistRequirementComponent",
+    "ChecklistRequirementDecision",
+    "ChecklistRequirementDefinition",
+    "ChecklistRequirementEvidence",
+    "ChecklistRulePack",
+    "ChecklistScenarioDefinition",
     "PolicyChunkingPolicy",
     "PolicyIdentityPolicy",
     "PolicyIntakeDecision",
@@ -23,4 +42,5 @@ __all__ = [
     "PolicyRetrievalQueryPolicy",
     "PolicySectionStructurePolicy",
     "RetrievalKeywordPlan",
+    "RuleDrivenChecklistPolicy",
 ]

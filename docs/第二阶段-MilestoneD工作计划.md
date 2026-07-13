@@ -9,7 +9,6 @@
 判断与执行的直接依据是：
 
 - `docs/当前阶段与下一阶段计划.md`
-- `docs/第二阶段milestoneB和milestoneC存在的弊端以及TODO.md`
 - 当前仓库中的实际代码状态
 
 `Milestone D` 的重点不再是继续打磨单点检索性能，而是：
@@ -34,7 +33,7 @@
 
 ## 3. 当前代码现实
 
-当前代码已经具备进入 `Milestone D` 的基础，但还没有形成规则/数据/结果三段式的业务链路。
+当前代码已经具备进入 `Milestone D` 的基础，并且已经开始落第一个最小业务 PoC，但还没有把通用规则获取、数据获取、结果生成三段式彻底抽象完整。
 
 ### 3.1 已有基础
 
@@ -46,18 +45,25 @@
 - 当前已有统一检索接口：
   - `POST /api/v1/kb/retrieval/search`
   - `POST /api/v1/kb/retrieval/ask`
+- 当前已新增一条独立的 D1 PoC 路由：
+  - `POST /api/v1/kb/policy-decisions/court-evaluation-materials/review`
 - 当前 `ask` 已能基于命中结果生成最小可引用回答
 - 当前领域层已经开始沉淀规则代码入口，例如：
   - `app/domain/policy/rules.py`
+- 当前已经有一版最小规则驱动清单校验能力：
+  - `app/domain/policy/checklist.py`
+- 当前已经有一版 PoC 级 decision service / schema：
+  - `app/services/policy_decision/service.py`
+  - `app/schemas/policy_decision.py`
 - 当前检索链路已能输出较完整的 debug / trace 信息，具备继续做规则/数据链路可解释性的基础
 
 ### 3.2 当前剩余的工程问题
 
-- 当前“规则获取”仍主要停留在检索到 chunk，还没有形成面向业务判断的规则抽象结果
-- 当前“数据获取”还没有独立的 provider / adapter 结构，后续不利于从 mock 数据逐步切到真实业务数据
-- 当前“结果生成”仍主要是问答式回答，还没有形成面向业务结论的结构化输出
-- 当前还没有一条单独的业务 PoC 链路，把规则、数据、结果三段串成可回归验证的最小闭环
-- 当前检索评测样本仍偏小，这会影响 D 阶段对“规则获取是否稳定”的判断信心
+- 当前 D1 已经跑通单场景 PoC，但规则获取仍偏场景内抽象，还没有形成更通用的 rule pack 结构
+- 当前数据获取虽然已有最小 `provider` 雏形，但仍是 inline / mock 级，尚未具备多来源切换能力
+- 当前结构化结果已经有首版 schema，但还只覆盖一个审核场景，尚未形成更通用的 decision contract
+- 当前 PoC 还集中在“申请材料核验”这一个场景，后续还要验证第二类规则问题能否沿用同一套路
+- 当前检索评测样本和 D 阶段 PoC 回归资产仍可继续扩充，但已不再是阻塞进入 D 阶段的前置问题
 
 ## 4. 当前阶段不做什么
 
@@ -103,6 +109,22 @@
 做到后应满足：
 
 - 后续开发不再围绕“到底做哪个业务场景”反复摇摆
+
+当前状态：
+
+- **已进入 D1，并已完成首个场景收口与最小落地**
+- 当前选定场景为：`委托评估机构申请材料核验`
+- 当前最小输入为：`submitted_materials`
+- 当前规则查询为：`申请参与委托评估的机构应提交哪些资料`
+- 当前结构化输出已包含：
+  - `decision`
+  - `reasoning`
+  - `citations`
+  - `used_fields`
+  - `missing_fields`
+  - `requirement_statuses`
+  - `debug`
+- 当前已补对应测试与真实 public 数据 smoke，说明 D1 已不再停留在设计阶段
 
 ### Step D2：规则获取抽象
 
@@ -231,12 +253,14 @@
 如果现在继续往下推进，建议按这个顺序阅读：
 
 1. `docs/当前阶段与下一阶段计划.md`
-2. `docs/第二阶段milestoneB和milestoneC存在的弊端以及TODO.md`
-3. `app/services/retrieval/pipeline.py`
-4. `app/services/retrieval/service.py`
-5. `app/services/retrieval/answer_service.py`
-6. `app/domain/policy/rules.py`
-7. `app/api/routes/retrieval.py`
+2. `app/services/retrieval/pipeline.py`
+3. `app/services/retrieval/service.py`
+4. `app/services/retrieval/answer_service.py`
+5. `app/domain/policy/rules.py`
+6. `app/domain/policy/checklist.py`
+7. `app/services/policy_decision/service.py`
+8. `app/api/routes/retrieval.py`
+9. `app/api/routes/policy_decision.py`
 
 这样看完之后，会很清楚：
 

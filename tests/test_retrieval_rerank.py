@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from app.repositories.policy_repository import RetrievedPolicyChunk
 from app.schemas import RetrievalSearchRequest
-from app.services.retrieval_pipeline import HybridRetrievalPipeline
+from app.services.retrieval import HybridRetrievalPipeline
 
 
 class StubEmbeddingService:
