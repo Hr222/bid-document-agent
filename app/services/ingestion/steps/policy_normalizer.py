@@ -10,7 +10,7 @@ class PolicyFormatNormalizer:
     """把旧版 `.doc` 标准化为 `.docx`。"""
 
     def __init__(self, workspace_root: Path) -> None:
-        self.workspace_root = workspace_root
+        self.workspace_root = workspace_root.resolve()
 
     def normalize(self, registered_file: RegisteredFileInfo) -> FormatNormalizationResult:
         """
@@ -30,9 +30,9 @@ class PolicyFormatNormalizer:
             )
 
         source_path = Path(registered_file.source_path)
-        output_dir = self.workspace_root / "normalized" / registered_file.sha256[:12]
+        output_dir = (self.workspace_root / "normalized" / registered_file.sha256[:12]).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{source_path.stem}.docx"
+        output_path = (output_dir / f"{source_path.stem}.docx").resolve()
 
         if output_path.exists():
             return FormatNormalizationResult(
@@ -87,6 +87,7 @@ $word.Quit()
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=180,
             check=False,
         )

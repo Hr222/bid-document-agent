@@ -30,11 +30,23 @@ class Settings(BaseSettings):
     zhipu_api_key: str | None = Field(default=None, alias="ZHIPU_API_KEY")
     zhipu_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
     zhipu_chat_model: str | None = "glm-4-flash"
+    ocr_provider: Literal["tencent", "zhipu"] = "tencent"
     ocr_model: str = "glm-4.6v-flash"
     ocr_max_pages_per_batch: int = 4
     ocr_image_max_side: int = 1800
     ocr_timeout_seconds: int = 60
     ocr_request_interval_seconds: float = 10.0
+    tencent_ocr_secret_id: str | None = Field(default=None, alias="TENCENT_OCR_SECRET_ID")
+    tencent_ocr_secret_key: str | None = Field(default=None, alias="TENCENT_OCR_SECRET_KEY")
+    tencent_ocr_region: str = Field(default="ap-guangzhou", alias="TENCENT_OCR_REGION")
+    tencent_ocr_endpoint: str = Field(
+        default="ocr.tencentcloudapi.com",
+        alias="TENCENT_OCR_ENDPOINT",
+    )
+    tencent_ocr_action: Literal["GeneralBasicOCR", "GeneralAccurateOCR"] = Field(
+        default="GeneralAccurateOCR",
+        alias="TENCENT_OCR_ACTION",
+    )
     retrieval_top_k_default: int = 5
     retrieval_top_k_max: int = 20
     retrieval_min_score: float = 0.45

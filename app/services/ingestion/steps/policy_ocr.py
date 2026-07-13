@@ -7,6 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from threading import Lock
 from time import monotonic, sleep
+from typing import Any
 
 from openai import OpenAI
 from PIL import Image, UnidentifiedImageError
@@ -35,15 +36,36 @@ _CUSTOM_IMAGE_MEDIA_TYPES = {
 }
 
 
+def require_tencent_sdk() -> tuple[Any, Any, Any, Any, Any]:
+    try:
+        from tencentcloud.common import credential
+        from tencentcloud.common.profile.client_profile import ClientProfile
+        from tencentcloud.common.profile.http_profile import HttpProfile
+        from tencentcloud.ocr.v20181119 import models, ocr_client
+    except ImportError as exc:
+        raise RuntimeError(
+            "缺少腾讯 OCR SDK，请先安装 tencentcloud-sdk-python。"
+        ) from exc
+
+    return credential, ClientProfile, HttpProfile, models, ocr_client
+
+
 class PolicyOcrService:
     """处理扫描页和图片块的 OCR。"""
 
     _rate_limit_lock = Lock()
     _next_request_at = 0.0
 
-    def __init__(self, client: OpenAI | None = None) -> None:
+    def __init__(self, client: object | None = None, tencent_models: object | None = None) -> None:
+        self.provider = settings.ocr_provider
+        self._client_injected = client is not None
+        self._pdf_base64_cache: dict[str, str] = {}
+        self.tencent_models = tencent_models
+
         if client is not None:
             self.client = client
+        elif self.provider == "tencent":
+            self.client, self.tencent_models = self._build_tencent_client()
         else:
             self.client = OpenAI(
                 api_key=settings.zhipu_api_key or "disabled",
@@ -75,18 +97,19 @@ class PolicyOcrService:
                 failed_blocks=len(ocr_targets),
             )
 
-        if not settings.zhipu_api_key:
+        if not self._client_injected and not self._has_provider_credentials():
             return OcrProcessResult(
                 applied=False,
                 parse_method="direct",
                 blocks=document.blocks,
-                notes=["未配置 ZHIPU_API_KEY，无法执行 OCR。"],
+                notes=[self._missing_provider_credentials_message()],
                 failed_blocks=len(ocr_targets),
             )
 
         updated_blocks: list[ParsedBlock] = []
         failed_blocks = 0
         succeeded_blocks = 0
+        skipped_blank_blocks = 0
         target_ids = {block.block_id for block in ocr_targets}
 
         for block in document.blocks:
@@ -95,12 +118,17 @@ class PolicyOcrService:
                 continue
 
             try:
-                image_bytes, media_type = self._resolve_image_payload(document.source_path, block)
+                if self.provider == "tencent" and block.metadata.get("pdf_page_render"):
+                    image_bytes, media_type = b"", "application/pdf"
+                else:
+                    image_bytes, media_type = self._resolve_image_payload(document.source_path, block)
                 normalized_text = self._ocr_image_bytes(
                     image_bytes,
                     media_type=media_type,
                     block_id=block.block_id,
                     page_no=block.page_no,
+                    source_path=document.source_path,
+                    block=block,
                 ).strip()
                 persistable_metadata = self._strip_runtime_image_metadata(block.metadata)
                 if normalized_text:
@@ -117,7 +145,21 @@ class PolicyOcrService:
                 else:
                     failed_blocks += 1
                     updated_blocks.append(block.model_copy(update={"metadata": persistable_metadata}))
-            except Exception:
+            except Exception as exc:
+                if self._is_expected_no_text_error(exc):
+                    skipped_blank_blocks += 1
+                    updated_blocks.append(
+                        block.model_copy(
+                            update={"metadata": self._strip_runtime_image_metadata(block.metadata)}
+                        )
+                    )
+                    logger.info(
+                        "OCR skipped blank page/textless block block_id=%s page_no=%s provider=%s",
+                        block.block_id,
+                        block.page_no,
+                        self.provider,
+                    )
+                    continue
                 logger.exception(
                     "OCR request failed block_id=%s page_no=%s",
                     block.block_id,
@@ -139,6 +181,8 @@ class PolicyOcrService:
         notes = [
             f"OCR 处理完成：成功 {succeeded_blocks} 个图片块，失败 {failed_blocks} 个图片块。"
         ]
+        if skipped_blank_blocks:
+            notes.append(f"已跳过 {skipped_blank_blocks} 个空白页/无文本图片块。")
         if failed_blocks and persist:
             notes.append("部分图片块 OCR 失败；若无法形成有效正文，入库阶段会终止。")
 
@@ -178,13 +222,11 @@ class PolicyOcrService:
         if not image_blocks:
             return ["当前文档未检测到需要 OCR 的图片块。"]
         if document.file_type == "image":
-            return ["当前图片文件未形成 OCR 目标。"]
+            return ["当前图片文件未形成可执行的 OCR 目标。"]
         if document.file_type == "docx":
-            if self._has_effective_text(document):
-                return ["当前 DOCX 已直接提取到正文，已跳过图片 OCR。"]
             return ["当前 DOCX 缺少可用于 OCR 的图片块。"]
         if document.file_type == "pdf" and not document.suspected_scanned:
-            return ["当前 PDF 已直接提取到正文，已跳过页面 OCR。"]
+            return ["当前 PDF 缺少可用于 OCR 的内嵌图片块。"]
         return ["当前文档无需执行 OCR。"]
 
     def _has_effective_text(self, document: ParsedDocumentResult) -> bool:
@@ -207,6 +249,31 @@ class PolicyOcrService:
         return self._normalize_image_payload(image_bytes, media_type)
 
     def _ocr_image_bytes(
+        self,
+        image_bytes: bytes,
+        *,
+        media_type: str = "image/png",
+        block_id: str | None = None,
+        page_no: int | None = None,
+        source_path: str | None = None,
+        block: ParsedBlock | None = None,
+    ) -> str:
+        if self.provider == "tencent":
+            if block is not None and block.metadata.get("pdf_page_render"):
+                return self._ocr_pdf_page_with_tencent(source_path=source_path, page_no=page_no)
+            return self._ocr_image_bytes_with_tencent(
+                image_bytes,
+                block_id=block_id,
+                page_no=page_no,
+            )
+        return self._ocr_image_bytes_with_zhipu(
+            image_bytes,
+            media_type=media_type,
+            block_id=block_id,
+            page_no=page_no,
+        )
+
+    def _ocr_image_bytes_with_zhipu(
         self,
         image_bytes: bytes,
         *,
@@ -254,6 +321,41 @@ class PolicyOcrService:
             if isinstance(part, dict) and part.get("type") == "text"
         ).strip()
 
+    def _ocr_image_bytes_with_tencent(
+        self,
+        image_bytes: bytes,
+        *,
+        block_id: str | None = None,
+        page_no: int | None = None,
+    ) -> str:
+        response_json = self._call_tencent_ocr(
+            payload={"ImageBase64": base64.b64encode(image_bytes).decode("utf-8")},
+            block_id=block_id,
+            page_no=page_no,
+        )
+        return "\n".join(self._extract_tencent_lines(response_json)).strip()
+
+    def _ocr_pdf_page_with_tencent(
+        self,
+        *,
+        source_path: str | None,
+        page_no: int | None,
+    ) -> str:
+        if not source_path:
+            raise RuntimeError("腾讯 OCR 缺少 PDF 文件路径。")
+        if page_no is None:
+            raise RuntimeError("腾讯 OCR 缺少 PDF 页码。")
+
+        response_json = self._call_tencent_ocr(
+            payload={
+                "ImageBase64": self._load_pdf_base64(source_path),
+                "IsPdf": True,
+                "PdfPageNumber": page_no,
+            },
+            page_no=page_no,
+        )
+        return "\n".join(self._extract_tencent_lines(response_json)).strip()
+
     def _render_pdf_page_as_png_bytes(self, source_path: str, page_no: int | None) -> bytes:
         if page_no is None:
             raise RuntimeError("扫描页图片块缺少页码，无法渲染 PDF 页面。")
@@ -276,6 +378,90 @@ class PolicyOcrService:
             for key, value in metadata.items()
             if key not in {"image_bytes", "pdf_page_render"}
         }
+
+    def _has_provider_credentials(self) -> bool:
+        if self.provider == "tencent":
+            return bool(settings.tencent_ocr_secret_id and settings.tencent_ocr_secret_key)
+        return bool(settings.zhipu_api_key)
+
+    def _missing_provider_credentials_message(self) -> str:
+        if self.provider == "tencent":
+            return "未配置 TENCENT_OCR_SECRET_ID / TENCENT_OCR_SECRET_KEY，无法执行 OCR。"
+        return "未配置 ZHIPU_API_KEY，无法执行 OCR。"
+
+    def _build_tencent_client(self) -> tuple[object, object]:
+        credential, ClientProfile, HttpProfile, models, ocr_client = require_tencent_sdk()
+        if not settings.tencent_ocr_secret_id or not settings.tencent_ocr_secret_key:
+            raise RuntimeError(self._missing_provider_credentials_message())
+
+        cred = credential.Credential(
+            settings.tencent_ocr_secret_id,
+            settings.tencent_ocr_secret_key,
+        )
+        http_profile = HttpProfile()
+        http_profile.endpoint = settings.tencent_ocr_endpoint
+        client_profile = ClientProfile()
+        client_profile.httpProfile = http_profile
+        client = ocr_client.OcrClient(cred, settings.tencent_ocr_region, client_profile)
+        return client, models
+
+    def _call_tencent_ocr(
+        self,
+        *,
+        payload: dict[str, object],
+        block_id: str | None = None,
+        page_no: int | None = None,
+    ) -> dict[str, object]:
+        if self.tencent_models is None:
+            raise RuntimeError("腾讯 OCR SDK 未初始化。")
+
+        request_name = f"{settings.tencent_ocr_action}Request"
+        request_cls = getattr(self.tencent_models, request_name, None)
+        if request_cls is None:
+            raise RuntimeError(f"腾讯 OCR 不支持的动作：{settings.tencent_ocr_action}")
+
+        request = request_cls()
+        request.from_json_string(json.dumps(payload))
+        self._reserve_request_slot(block_id=block_id, page_no=page_no)
+        response = getattr(self.client, settings.tencent_ocr_action)(request)
+        response_json = json.loads(response.to_json_string())
+        logger.info(
+            "OCR raw response provider=tencent action=%s block_id=%s page_no=%s response=%s",
+            settings.tencent_ocr_action,
+            block_id,
+            page_no,
+            json.dumps(response_json, ensure_ascii=False),
+        )
+        return response_json
+
+    def _extract_tencent_lines(self, response_json: dict[str, object]) -> list[str]:
+        detections = response_json.get("TextDetections", [])
+        if not isinstance(detections, list):
+            return []
+
+        lines: list[str] = []
+        for item in detections:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("DetectedText")
+            if isinstance(text, str) and text.strip():
+                lines.append(text.strip())
+        return lines
+
+    def _load_pdf_base64(self, source_path: str) -> str:
+        cached = self._pdf_base64_cache.get(source_path)
+        if cached is not None:
+            return cached
+
+        encoded = base64.b64encode(Path(source_path).read_bytes()).decode("utf-8")
+        self._pdf_base64_cache[source_path] = encoded
+        return encoded
+
+    def _is_expected_no_text_error(self, exc: Exception) -> bool:
+        error_code = getattr(exc, "code", None)
+        if error_code == "FailedOperation.ImageNoText":
+            return True
+        return False
 
     def _reserve_request_slot(
         self,
