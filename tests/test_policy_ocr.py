@@ -137,7 +137,6 @@ def test_process_updates_text_source_and_runtime_metadata_after_success(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(settings, "ocr_enabled", True)
-    monkeypatch.setattr(settings, "zhipu_api_key", "unit-test-key")
 
     service = PolicyOcrService(client=object())
     monkeypatch.setattr(

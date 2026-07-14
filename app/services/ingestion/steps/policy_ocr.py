@@ -9,7 +9,6 @@ from threading import Lock
 from time import monotonic, sleep
 from typing import Any
 
-from openai import OpenAI
 from PIL import Image, UnidentifiedImageError
 
 from app.core.config import settings
@@ -57,21 +56,14 @@ class PolicyOcrService:
     _next_request_at = 0.0
 
     def __init__(self, client: object | None = None, tencent_models: object | None = None) -> None:
-        self.provider = settings.ocr_provider
         self._client_injected = client is not None
         self._pdf_base64_cache: dict[str, str] = {}
         self.tencent_models = tencent_models
 
         if client is not None:
             self.client = client
-        elif self.provider == "tencent":
-            self.client, self.tencent_models = self._build_tencent_client()
         else:
-            self.client = OpenAI(
-                api_key=settings.zhipu_api_key or "disabled",
-                base_url=settings.zhipu_base_url,
-                timeout=settings.ocr_timeout_seconds,
-            )
+            self.client, self.tencent_models = self._build_tencent_client()
         self.request_interval_seconds = max(0.0, settings.ocr_request_interval_seconds)
 
     def process(self, document: ParsedDocumentResult, *, persist: bool) -> OcrProcessResult:
@@ -118,13 +110,12 @@ class PolicyOcrService:
                 continue
 
             try:
-                if self.provider == "tencent" and block.metadata.get("pdf_page_render"):
-                    image_bytes, media_type = b"", "application/pdf"
+                if block.metadata.get("pdf_page_render"):
+                    image_bytes = b""
                 else:
-                    image_bytes, media_type = self._resolve_image_payload(document.source_path, block)
+                    image_bytes, _ = self._resolve_image_payload(document.source_path, block)
                 normalized_text = self._ocr_image_bytes(
                     image_bytes,
-                    media_type=media_type,
                     block_id=block.block_id,
                     page_no=block.page_no,
                     source_path=document.source_path,
@@ -157,7 +148,7 @@ class PolicyOcrService:
                         "OCR skipped blank page/textless block block_id=%s page_no=%s provider=%s",
                         block.block_id,
                         block.page_no,
-                        self.provider,
+                        "tencent",
                     )
                     continue
                 logger.exception(
@@ -252,74 +243,18 @@ class PolicyOcrService:
         self,
         image_bytes: bytes,
         *,
-        media_type: str = "image/png",
         block_id: str | None = None,
         page_no: int | None = None,
         source_path: str | None = None,
         block: ParsedBlock | None = None,
     ) -> str:
-        if self.provider == "tencent":
-            if block is not None and block.metadata.get("pdf_page_render"):
-                return self._ocr_pdf_page_with_tencent(source_path=source_path, page_no=page_no)
-            return self._ocr_image_bytes_with_tencent(
-                image_bytes,
-                block_id=block_id,
-                page_no=page_no,
-            )
-        return self._ocr_image_bytes_with_zhipu(
+        if block is not None and block.metadata.get("pdf_page_render"):
+            return self._ocr_pdf_page_with_tencent(source_path=source_path, page_no=page_no)
+        return self._ocr_image_bytes_with_tencent(
             image_bytes,
-            media_type=media_type,
             block_id=block_id,
             page_no=page_no,
         )
-
-    def _ocr_image_bytes_with_zhipu(
-        self,
-        image_bytes: bytes,
-        *,
-        media_type: str = "image/png",
-        block_id: str | None = None,
-        page_no: int | None = None,
-    ) -> str:
-        data_url = f"data:{media_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
-        self._reserve_request_slot(block_id=block_id, page_no=page_no)
-        response = self.client.chat.completions.create(
-            model=settings.ocr_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "你是一个 OCR 助手。请只输出图片中的正文文字，保持自然阅读顺序，不要添加解释。",
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "请提取这张图片中的正文文字，并按自然阅读顺序输出。",
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": data_url},
-                        },
-                    ],
-                },
-            ],
-        )
-        logger.info(
-            "OCR raw response block_id=%s page_no=%s response=%s",
-            block_id,
-            page_no,
-            self._serialize_response(response),
-        )
-        message = response.choices[0].message
-        content = message.content or ""
-        if isinstance(content, str):
-            return content.strip()
-        return "\n".join(
-            part.get("text", "").strip()
-            for part in content
-            if isinstance(part, dict) and part.get("type") == "text"
-        ).strip()
 
     def _ocr_image_bytes_with_tencent(
         self,
@@ -380,14 +315,10 @@ class PolicyOcrService:
         }
 
     def _has_provider_credentials(self) -> bool:
-        if self.provider == "tencent":
-            return bool(settings.tencent_ocr_secret_id and settings.tencent_ocr_secret_key)
-        return bool(settings.zhipu_api_key)
+        return bool(settings.tencent_ocr_secret_id and settings.tencent_ocr_secret_key)
 
     def _missing_provider_credentials_message(self) -> str:
-        if self.provider == "tencent":
-            return "未配置 TENCENT_OCR_SECRET_ID / TENCENT_OCR_SECRET_KEY，无法执行 OCR。"
-        return "未配置 ZHIPU_API_KEY，无法执行 OCR。"
+        return "未配置 TENCENT_OCR_SECRET_ID / TENCENT_OCR_SECRET_KEY，无法执行 OCR。"
 
     def _build_tencent_client(self) -> tuple[object, object]:
         credential, ClientProfile, HttpProfile, models, ocr_client = require_tencent_sdk()
@@ -487,13 +418,6 @@ class PolicyOcrService:
                 self.request_interval_seconds,
             )
             sleep(wait_seconds)
-
-    def _serialize_response(self, response: object) -> str:
-        if hasattr(response, "model_dump_json"):
-            return response.model_dump_json()
-        if hasattr(response, "model_dump"):
-            return json.dumps(response.model_dump(mode="json"), ensure_ascii=False)
-        return repr(response)
 
     def _resolve_media_type(self, block: ParsedBlock, image_bytes: bytes) -> str:
         explicit_media_type = block.metadata.get("image_media_type")
