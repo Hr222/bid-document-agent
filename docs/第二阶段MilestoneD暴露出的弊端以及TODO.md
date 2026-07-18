@@ -59,9 +59,9 @@
 - **不阻塞 D 阶段继续推进**
 - **如果 E 阶段开始新增第二个 checklist 场景，就需要优先处理**
 
-### 2.2 场景注册能力还没有真正独立出来
+### 2.2 场景注册能力已完成首版，但仍未进入多场景治理阶段
 
-当前虽然已经有首版场景定义对象，但还没有统一的 `scenario registry`。
+当前已经有统一的 `scenario registry`，但仍处于首版形态。
 
 这会带来两个问题：
 
@@ -76,11 +76,11 @@
 当前判断：
 
 - **目前不阻塞**
-- **当 E 阶段准备接第二个决策类场景时，应尽快补上**
+- **当 E 阶段准备接第二个决策类场景时，应继续把 registry 往多场景治理方向补强**
 
-### 2.3 数据获取 provider 还是最小 PoC 形态
+### 2.3 数据获取层已完成首版抽象，但 provider 仍是最小 PoC 形态
 
-当前 `policy_decision` 已经抽出了 provider 抽象，但当前实际能力仍然比较轻：
+当前已经补出独立的数据获取 service 与统一 `DataPack`，但当前实际能力仍然比较轻：
 
 - 主要是 inline 输入
 - 更像“把提交材料直接塞进来做判断”
@@ -95,7 +95,7 @@
 当前判断：
 
 - **不阻塞 D 阶段**
-- **如果 E 阶段需要多来源数据接入，应优先提升**
+- **如果 E 阶段需要多来源数据接入，应优先把 provider 提升到多来源形态**
 
 ### 2.4 Decision contract 仍偏单场景输出
 
@@ -183,7 +183,7 @@
 | 问题 | 当前是否阻塞 E | 建议 |
 | --- | --- | --- |
 | Checklist 规则包写死在代码里 | 否 | 若 E 阶段新增第二个 checklist 场景，则优先处理 |
-| 缺少统一 scenario registry | 否 | 若 E 阶段开始出现多场景 decision 路由，则优先处理 |
+| scenario registry 仍是首版 | 否 | 若 E 阶段开始出现多场景 decision 路由，则优先补强 |
 | Provider 仍是 PoC 级 | 否 | 若 E 阶段需要多来源数据接入，则优先处理 |
 | Decision contract 偏单场景 | 否 | 若 E 阶段要做第二类决策输出，则优先处理 |
 | 匹配算法偏轻量 | 否 | 若 E 阶段规则复杂度提高，则优先处理 |
@@ -200,7 +200,7 @@
 ### P1：一旦 E 阶段触发对应条件，就应尽快处理
 
 - Checklist 规则外置化
-- 统一 scenario registry
+- 统一 scenario registry 的多场景治理能力
 - Provider 多来源抽象
 - Decision contract 通用化
 
@@ -221,7 +221,7 @@
 | TODO | 目标 | 建议时机 |
 | --- | --- | --- |
 | 将 checklist 规则定义从 Python 常量中拆出 | 让新增场景时尽量不改执行代码 | E 前如果出现第二个 checklist 场景；否则 E 后 |
-| 新增 scenario registry | 统一按 `scenario_code` 管理规则场景 | E 前如果出现多场景决策；否则 E 后 |
+| 补强 scenario registry | 统一按 `scenario_code` 管理并治理多场景规则场景 | E 前如果出现多场景决策；否则 E 后 |
 | 将 provider 抽象成多来源输入口 | 为表单、数据库、Agent 参数输入做准备 | E 前如果要接真实数据源；否则 E 后 |
 | 抽象通用 decision contract | 避免一个场景一个 response schema | E 前如果要做第二类决策问题；否则 E 后 |
 | 强化材料别名匹配算法 | 降低误命中与漏命中 | E 中后期或 E 后 |

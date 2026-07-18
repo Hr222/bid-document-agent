@@ -1,28 +1,18 @@
-from __future__ import annotations
+"""兼容旧引用的数据获取协议导出。
 
-from dataclasses import dataclass
-from typing import Protocol
+当前 D3 已将数据获取能力迁入 `policy_data_acquisition`，
+这里保留旧导出，避免现有引用路径立刻失效。
+"""
 
-from app.schemas.policy_decision import PolicyDecisionChecklistRequest
-from app.schemas.retrieval import RetrievalSearchRequest, RetrievalSearchResponse
+from app.services.policy_data_acquisition.contracts import (
+    ChecklistDataAcquisitionRequest,
+    ChecklistDataProvider,
+)
+from app.services.policy_data_acquisition.models import ChecklistDataFieldTrace, ChecklistDataPack
 
-
-class RetrievalSearcher(Protocol):
-    """抽象检索能力，便于复用现有检索服务或测试替身。"""
-
-    def search(self, request: RetrievalSearchRequest) -> RetrievalSearchResponse: ...
-
-
-@dataclass(slots=True, frozen=True)
-class ChecklistSubmissionPayload:
-    """统一承载待核验的提交材料列表。"""
-
-    submitted_materials: list[str]
-
-
-class ChecklistDataProvider(Protocol):
-    """抽象材料来源，允许后续接入 Agent 或外部表单。"""
-
-    provider_name: str
-
-    def collect(self, request: PolicyDecisionChecklistRequest) -> ChecklistSubmissionPayload: ...
+__all__ = [
+    "ChecklistDataAcquisitionRequest",
+    "ChecklistDataFieldTrace",
+    "ChecklistDataPack",
+    "ChecklistDataProvider",
+]

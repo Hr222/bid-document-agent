@@ -16,6 +16,11 @@ from app.domain.policy.checklist import (
     ChecklistScenarioDefinition,
     RuleDrivenChecklistPolicy,
 )
+from app.domain.policy.registry import (
+    CHECKLIST_SCENARIO_REGISTRY,
+    ChecklistScenarioRegistry,
+    ScenarioNotFoundError,
+)
 from app.domain.policy.rules import (
     PolicyChunkingPolicy,
     PolicyIdentityPolicy,
@@ -28,12 +33,14 @@ from app.domain.policy.rules import (
 
 __all__ = [
     "COURT_EVALUATION_MATERIALS_SCENARIO",
+    "CHECKLIST_SCENARIO_REGISTRY",
     "ChecklistEvaluationResult",
     "ChecklistRequirementComponent",
     "ChecklistRequirementDecision",
     "ChecklistRequirementDefinition",
     "ChecklistRequirementEvidence",
     "ChecklistRulePack",
+    "ChecklistScenarioRegistry",
     "ChecklistScenarioDefinition",
     "PolicyChunkingPolicy",
     "PolicyIdentityPolicy",
@@ -43,4 +50,5 @@ __all__ = [
     "PolicySectionStructurePolicy",
     "RetrievalKeywordPlan",
     "RuleDrivenChecklistPolicy",
+    "ScenarioNotFoundError",
 ]

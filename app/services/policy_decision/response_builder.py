@@ -3,19 +3,21 @@ from __future__ import annotations
 from app.core.config import settings
 from app.domain.policy import ChecklistEvaluationResult, ChecklistRulePack, ChecklistScenarioDefinition
 from app.schemas.policy_decision import (
+    PolicyDecisionDataAcquisitionDebug,
+    PolicyDecisionDataFieldTrace,
     PolicyDecisionChecklistResponse,
     PolicyDecisionDebugInfo,
     PolicyDecisionRequirementStatus,
 )
-from app.schemas.retrieval import AnswerCitation, RetrievalSearchResponse
+from app.schemas.retrieval import AnswerCitation, RetrievalDebugInfo, RetrievalSearchResponse
+from app.services.policy_data_acquisition.models import ChecklistDataPack
 
 
 class PolicyDecisionResponseBuilder:
     """统一组装材料核验接口的响应结构。"""
 
-    def __init__(self, *, scenario: ChecklistScenarioDefinition, provider_name: str) -> None:
+    def __init__(self, *, scenario: ChecklistScenarioDefinition) -> None:
         self.scenario = scenario
-        self.provider_name = provider_name
 
     def build_requirement_statuses_from_rule_pack(
         self,
@@ -76,19 +78,42 @@ class PolicyDecisionResponseBuilder:
     def build_debug_info(
         self,
         *,
-        search_response: RetrievalSearchResponse,
+        retrieval_debug: RetrievalDebugInfo,
+        rule_hit_count: int,
         rule_match_count: int,
-        submitted_material_count: int,
+        data_pack: ChecklistDataPack,
     ) -> PolicyDecisionDebugInfo:
         """补充检索与判定阶段的调试信息。"""
         return PolicyDecisionDebugInfo(
             retrieval_query=self.scenario.retrieval_query,
             policy_category=self.scenario.policy_category,
-            provider=self.provider_name,
-            rule_hit_count=len(search_response.hits),
+            provider=data_pack.provider_name,
+            rule_hit_count=rule_hit_count,
             matched_rule_requirement_count=rule_match_count,
-            submitted_material_count=submitted_material_count,
-            retrieval=search_response.debug,
+            submitted_material_count=len(data_pack.submitted_materials),
+            data_acquisition=self.build_data_acquisition_debug(data_pack),
+            retrieval=retrieval_debug,
+        )
+
+    def build_data_acquisition_debug(
+        self,
+        data_pack: ChecklistDataPack,
+    ) -> PolicyDecisionDataAcquisitionDebug:
+        """将数据层 trace 转成接口调试对象。"""
+        return PolicyDecisionDataAcquisitionDebug(
+            provider=data_pack.provider_name,
+            provided_input_fields=list(data_pack.provided_input_fields),
+            missing_input_fields=list(data_pack.missing_input_fields),
+            field_traces=[
+                PolicyDecisionDataFieldTrace(
+                    field_key=item.field_key,
+                    label=item.label,
+                    source=item.source,
+                    provided=item.provided,
+                    value_count=item.value_count,
+                )
+                for item in data_pack.field_traces
+            ],
         )
 
     def build_response(
@@ -98,6 +123,7 @@ class PolicyDecisionResponseBuilder:
         reasoning: list[str],
         citations: list[AnswerCitation],
         used_fields: list[str],
+        missing_input_fields: list[str],
         missing_fields: list[str],
         requirement_statuses: list[PolicyDecisionRequirementStatus],
         debug: PolicyDecisionDebugInfo,
@@ -110,6 +136,7 @@ class PolicyDecisionResponseBuilder:
             reasoning=reasoning,
             citations=citations,
             used_fields=used_fields,
+            missing_input_fields=missing_input_fields,
             missing_fields=missing_fields,
             requirement_statuses=requirement_statuses,
             debug=debug,

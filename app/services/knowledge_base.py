@@ -1,5 +1,3 @@
-from sqlalchemy.orm import Session
-
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas.knowledge_base import (
     KnowledgeBaseOverview,
@@ -11,6 +9,9 @@ from app.schemas.knowledge_base import (
 
 class KnowledgeBaseService:
     """知识库概览与轻量管理服务。"""
+
+    def __init__(self, repository: PolicyRepository | None = None) -> None:
+        self.repository = repository
 
     def get_overview(self) -> KnowledgeBaseOverview:
         return KnowledgeBaseOverview(
@@ -38,14 +39,15 @@ class KnowledgeBaseService:
 
     def list_documents(
         self,
-        session: Session,
         *,
         search: str | None = None,
         policy_category: str | None = None,
         limit: int = 50,
     ) -> PolicyDocumentOptionList:
-        repository = PolicyRepository(session)
-        items = repository.list_documents(
+        if self.repository is None:
+            raise RuntimeError("列出制度文档时必须提供已装配的仓储实例。")
+
+        items = self.repository.list_documents(
             search=search,
             policy_category=policy_category,
             limit=limit,

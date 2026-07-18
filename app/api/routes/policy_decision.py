@@ -1,26 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session
+from app.api.deps import get_policy_capability_bridge
+from app.bridges import PolicyCapabilityBridge
 from app.db.schema_health import KB_SCHEMA_SETUP_GUIDE, is_missing_kb_schema_error
-from app.repositories.policy_repository import PolicyRepository
 from app.schemas.policy_decision import (
     PolicyDecisionChecklistRequest,
     PolicyDecisionChecklistResponse,
 )
 from app.services.exceptions import UpstreamServiceError
-from app.services.policy_decision import RuleDrivenChecklistDecisionService
-from app.services.retrieval import KnowledgeRetrievalService
 
 router = APIRouter()
-
-
-def _decision_service(session: Session = Depends(get_db_session)) -> RuleDrivenChecklistDecisionService:
-    """按请求作用域构建材料核验服务。"""
-    repository = PolicyRepository(session)
-    retrieval_service = KnowledgeRetrievalService(repository)
-    return RuleDrivenChecklistDecisionService(retrieval_service)
 
 
 @router.post(
@@ -29,11 +19,11 @@ def _decision_service(session: Session = Depends(get_db_session)) -> RuleDrivenC
 )
 async def review_court_evaluation_materials(
     request: PolicyDecisionChecklistRequest,
-    service: RuleDrivenChecklistDecisionService = Depends(_decision_service),
+    bridge: PolicyCapabilityBridge = Depends(get_policy_capability_bridge),
 ) -> PolicyDecisionChecklistResponse:
-    """对外暴露法院委托评估机构材料核验接口。"""
+    """通过统一桥接层暴露当前材料核验能力。"""
     try:
-        return service.review_court_evaluation_materials(request)
+        return bridge.review_court_evaluation_materials(request)
     except ProgrammingError as exc:
         if is_missing_kb_schema_error(exc):
             raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc

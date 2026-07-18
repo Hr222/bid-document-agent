@@ -33,7 +33,7 @@
 
 ## 3. 当前代码现实
 
-当前代码已经具备进入 `Milestone D` 的基础，并且已经开始落第一个最小业务 PoC，但还没有把通用规则获取、数据获取、结果生成三段式彻底抽象完整。
+当前代码已经具备进入 `Milestone D` 的基础，并且已经完成首个最小业务 PoC，同时把规则获取层与数据获取层都完成了首版抽象；但结果生成链路仍未彻底通用化。
 
 ### 3.1 已有基础
 
@@ -59,8 +59,8 @@
 
 ### 3.2 当前剩余的工程问题
 
-- 当前 D1 已经跑通单场景 PoC，但规则获取仍偏场景内抽象，还没有形成更通用的 rule pack 结构
-- 当前数据获取虽然已有最小 `provider` 雏形，但仍是 inline / mock 级，尚未具备多来源切换能力
+- 当前 D1 已经跑通单场景 PoC，且 D2 已补出首版 `RulePack` 与规则获取服务，但还只完成了第一类规则场景验证
+- 当前 D3 已补出首版 `DataPack`、数据获取 service 与来源 trace，但仍只完成 inline provider 落地
 - 当前结构化结果已经有首版 schema，但还只覆盖一个审核场景，尚未形成更通用的 decision contract
 - 当前 PoC 还集中在“申请材料核验”这一个场景，后续还要验证第二类规则问题能否沿用同一套路
 - 当前检索评测样本和 D 阶段 PoC 回归资产仍可继续扩充，但已不再是阻塞进入 D 阶段的前置问题
@@ -150,6 +150,15 @@
 - 系统不再只是“搜到一些 chunk”
 - 而是能输出“这次业务判断当前依据的规则包是什么”
 
+当前状态：
+
+- **已完成首版落地**
+- 已新增 `ScenarioRegistry`
+- 已新增统一 `RulePack`
+- 已新增 `PolicyRuleRetrievalService`
+- 已将 `court-evaluation-materials-review` 场景迁移到“规则获取层 -> 决策层”的新链路
+- 已补齐对应单测与回归验证
+
 ### Step D3：数据获取抽象
 
 这一小步的重点是先搭出最小可替换结构，而不是现在就接真实业务系统。
@@ -171,6 +180,16 @@
 
 - 规则链路可以明确告诉后续步骤“还缺哪些字段”
 - 数据获取逻辑不直接散落在 API、prompt 或 service 编排代码里
+
+当前状态：
+
+- **已完成首版落地**
+- 已新增 `PolicyDataAcquisitionService`
+- 已新增统一 `ChecklistDataAcquisitionRequest`
+- 已新增统一 `ChecklistDataPack`
+- 已补齐输入字段缺失提示与来源 trace
+- 已将 `court-evaluation-materials-review` 场景迁移到“规则层 -> 数据层 -> 决策层”的新链路
+- 已补齐对应单测与全量回归验证
 
 ### Step D4：结果生成链路
 

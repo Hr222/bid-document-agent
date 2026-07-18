@@ -1,24 +1,16 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session
-from app.core.config import settings
+from app.api.deps import get_application_container, get_stateless_application_container
+from app.application import ApplicationContainer
 from app.core.logging import get_logger
 from app.db.schema_health import KB_SCHEMA_SETUP_GUIDE, is_missing_kb_schema_error
 from app.repositories.policy_repository import PolicyRepository
 from app.schemas import PolicyPipelineRequest, PolicyPipelineResponse
 from app.schemas.policy_upload import PolicyUploadIngestRequest, PolicyUploadPreviewResponse
-from app.services.ingestion import PolicyPipelineService, PolicyUploadService
 
 router = APIRouter()
 logger = get_logger("app.api.policy_pipeline")
-
-
-def _upload_service() -> PolicyUploadService:
-    return PolicyUploadService(Path(settings.policy_pipeline_workspace))
 
 
 def _validate_target_document_id(
@@ -36,9 +28,12 @@ def _validate_target_document_id(
 
 
 @router.post("/policy-pipeline/preview", response_model=PolicyPipelineResponse)
-async def preview_policy_pipeline(request: PolicyPipelineRequest) -> PolicyPipelineResponse:
+async def preview_policy_pipeline(
+    request: PolicyPipelineRequest,
+    container: ApplicationContainer = Depends(get_stateless_application_container),
+) -> PolicyPipelineResponse:
     """执行预览流水线，不写入数据库。"""
-    service = PolicyPipelineService()
+    service = container.policy_pipeline_preview_service()
     try:
         return service.preview(request)
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
@@ -48,12 +43,12 @@ async def preview_policy_pipeline(request: PolicyPipelineRequest) -> PolicyPipel
 @router.post("/policy-pipeline/ingest", response_model=PolicyPipelineResponse)
 async def ingest_policy_pipeline(
     request: PolicyPipelineRequest,
-    session: Session = Depends(get_db_session),
+    container: ApplicationContainer = Depends(get_application_container),
 ) -> PolicyPipelineResponse:
     """执行完整流水线，并写入制度文档、版本、章节和切块。"""
-    repository = PolicyRepository(session)
+    repository = container.policy_repository()
     _validate_target_document_id(repository, request.target_document_id)
-    service = PolicyPipelineService(repository=repository)
+    service = container.policy_pipeline_ingest_service()
     try:
         return service.ingest(request)
     except ProgrammingError as exc:
@@ -71,11 +66,13 @@ async def preview_policy_pipeline_upload(
     policy_category: str = Form("管理制度"),
     responsible_department: str | None = Form(None),
     version_label: str | None = Form(None),
+    container: ApplicationContainer = Depends(get_stateless_application_container),
 ) -> PolicyUploadPreviewResponse:
-    upload_service = _upload_service()
+    upload_service = container.policy_upload_service()
+    pipeline_service = container.policy_pipeline_preview_service()
     try:
         staged = upload_service.stage_upload(file)
-        response = PolicyPipelineService().preview(
+        response = pipeline_service.preview(
             PolicyPipelineRequest(
                 source_path=staged.stored_path,
                 policy_category=policy_category,
@@ -94,12 +91,12 @@ async def preview_policy_pipeline_upload(
 @router.post("/policy-pipeline/ingest-upload", response_model=PolicyPipelineResponse)
 async def ingest_policy_pipeline_upload(
     request: PolicyUploadIngestRequest,
-    session: Session = Depends(get_db_session),
+    container: ApplicationContainer = Depends(get_application_container),
 ) -> PolicyPipelineResponse:
-    upload_service = _upload_service()
-    repository = PolicyRepository(session)
+    upload_service = container.policy_upload_service()
+    repository = container.policy_repository()
     _validate_target_document_id(repository, request.target_document_id)
-    service = PolicyPipelineService(repository=repository)
+    service = container.policy_pipeline_ingest_service()
     try:
         source_path = upload_service.resolve_upload(request.upload_id)
         return service.ingest(

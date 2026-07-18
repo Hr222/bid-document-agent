@@ -50,6 +50,8 @@ from app.schemas.policy_pipeline_content import (
 # 流水线最终响应 Schema
 from app.schemas.policy_pipeline_response import PolicyPipelineResponse
 from app.schemas.policy_decision import (
+    PolicyDecisionDataAcquisitionDebug,
+    PolicyDecisionDataFieldTrace,
     PolicyDecisionChecklistRequest,
     PolicyDecisionChecklistResponse,
     PolicyDecisionDebugInfo,
@@ -102,6 +104,8 @@ __all__ = [
     "PolicyPipelineResponse",
     "PolicyDecisionChecklistRequest",
     "PolicyDecisionChecklistResponse",
+    "PolicyDecisionDataAcquisitionDebug",
+    "PolicyDecisionDataFieldTrace",
     "PolicyDecisionDebugInfo",
     "PolicyDecisionRequirementStatus",
     "RetrievalSearchRequest",

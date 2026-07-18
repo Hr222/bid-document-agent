@@ -51,7 +51,27 @@ class PolicyDecisionDebugInfo(BaseModel):
     rule_hit_count: int
     matched_rule_requirement_count: int
     submitted_material_count: int
+    data_acquisition: "PolicyDecisionDataAcquisitionDebug"
     retrieval: RetrievalDebugInfo
+
+
+class PolicyDecisionDataFieldTrace(BaseModel):
+    """单个业务输入字段的来源与供给情况。"""
+
+    field_key: str
+    label: str
+    source: str
+    provided: bool
+    value_count: int
+
+
+class PolicyDecisionDataAcquisitionDebug(BaseModel):
+    """数据获取阶段的调试摘要。"""
+
+    provider: str
+    provided_input_fields: list[str] = Field(default_factory=list)
+    missing_input_fields: list[str] = Field(default_factory=list)
+    field_traces: list[PolicyDecisionDataFieldTrace] = Field(default_factory=list)
 
 
 class PolicyDecisionChecklistResponse(BaseModel):
@@ -63,6 +83,7 @@ class PolicyDecisionChecklistResponse(BaseModel):
     reasoning: list[str]
     citations: list[AnswerCitation]
     used_fields: list[str]
+    missing_input_fields: list[str]
     missing_fields: list[str]
     requirement_statuses: list[PolicyDecisionRequirementStatus]
     debug: PolicyDecisionDebugInfo

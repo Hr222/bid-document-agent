@@ -96,10 +96,12 @@ def test_rule_driven_checklist_reports_missing_materials() -> None:
     )
 
     assert response.decision == "fail"
+    assert response.missing_input_fields == []
     assert "资格证书副本" in response.missing_fields
     assert "注资证明及资产明细表" in response.missing_fields
     assert "法院指定提交的其他资料" in response.missing_fields
     assert response.debug.matched_rule_requirement_count == 8
+    assert response.debug.data_acquisition.provider == "inline_submitted_materials"
 
 
 def test_rule_driven_checklist_passes_when_all_materials_exist() -> None:
@@ -126,6 +128,7 @@ def test_rule_driven_checklist_passes_when_all_materials_exist() -> None:
     )
 
     assert response.decision == "pass"
+    assert response.missing_input_fields == []
     assert response.missing_fields == []
     assert len(response.used_fields) == 8
 
@@ -141,5 +144,18 @@ def test_rule_driven_checklist_returns_insufficient_evidence_for_partial_rule_te
 
     assert response.decision == "insufficient_evidence"
     assert response.used_fields == []
+    assert response.missing_input_fields == []
     assert response.missing_fields == []
     assert response.debug.matched_rule_requirement_count < 8
+
+
+def test_rule_driven_checklist_returns_insufficient_evidence_for_missing_business_input() -> None:
+    service = RuleDrivenChecklistDecisionService(FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]))
+
+    response = service.review_court_evaluation_materials(PolicyDecisionChecklistRequest())
+
+    assert response.decision == "insufficient_evidence"
+    assert response.used_fields == []
+    assert response.missing_input_fields == ["已提交材料列表"]
+    assert response.missing_fields == []
+    assert response.debug.data_acquisition.missing_input_fields == ["已提交材料列表"]
