@@ -4,8 +4,10 @@
 
 ## 当前脚本
 
-- [tencent_ocr_mvp.py](/D:/workspace/bid-document-agent/tests/ocr/tencent_ocr_mvp.py)
-- [classify_sample_inventory.py](/D:/workspace/bid-document-agent/tests/ocr/classify_sample_inventory.py)
+- [tencent_ocr_mvp.py](/D:/workspace/bid-document-agent/tools/ocr/tencent_ocr_mvp.py)
+- [classify_sample_inventory.py](/D:/workspace/bid-document-agent/tools/ocr/classify_sample_inventory.py)
+
+安全要求：真实文档、OCR 原始响应、分类 CSV/JSON 和训练样本只能放在仓库外部或本地 `.runtime`，禁止提交到 Git。
 
 ## 1. 腾讯 OCR MVP
 
@@ -40,19 +42,19 @@ TENCENT_OCR_REGION=ap-guangzhou
 识别 PDF：
 
 ```bash
-python tests/ocr/tencent_ocr_mvp.py "D:\data\sample.pdf" --page-start 1 --page-limit 5
+python tools/ocr/tencent_ocr_mvp.py "D:\data\sample.pdf" --page-start 1 --page-limit 5
 ```
 
 识别 DOCX：
 
 ```bash
-python tests/ocr/tencent_ocr_mvp.py "D:\data\sample.docx" --docx-image-limit 10
+python tools/ocr/tencent_ocr_mvp.py "D:\data\sample.docx" --docx-image-limit 10
 ```
 
 默认输出到：
 
 ```text
-tests/ocr/output/<时间戳>_<文件名>/
+.runtime/ocr_output/<时间戳>_<文件名>/
 ```
 
 目录中会包含：
@@ -88,19 +90,19 @@ tests/ocr/output/<时间戳>_<文件名>/
 ### 用法
 
 ```bash
-python tests/ocr/classify_sample_inventory.py "E:\data" --pdf-sample-pages 3
+python tools/ocr/classify_sample_inventory.py "E:\data" --pdf-sample-pages 3
 ```
 
 如果只想先看一部分：
 
 ```bash
-python tests/ocr/classify_sample_inventory.py "E:\data" --limit 200 --preview 20
+python tools/ocr/classify_sample_inventory.py "E:\data" --limit 200 --preview 20
 ```
 
 ### 输出
 
 ```text
-tests/ocr/output/inventory/<时间戳>_<目录名>/
+.runtime/ocr_inventory/<时间戳>_<目录名>/
 ```
 
 目录中会包含：

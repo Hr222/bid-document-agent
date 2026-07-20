@@ -22,7 +22,7 @@ class TencentOcrMvpSettings(BaseSettings):
     region: str = Field(default="ap-guangzhou", alias="TENCENT_OCR_REGION")
     endpoint: str = Field(default="ocr.tencentcloudapi.com", alias="TENCENT_OCR_ENDPOINT")
     action: str = Field(default="GeneralAccurateOCR", alias="TENCENT_OCR_ACTION")
-    output_root: str = Field(default="tests/ocr/output", alias="TENCENT_OCR_OUTPUT_ROOT")
+    output_root: str = Field(default=".runtime/ocr_output", alias="TENCENT_OCR_OUTPUT_ROOT")
     docx_image_limit: int = Field(default=50, alias="TENCENT_OCR_DOCX_IMAGE_LIMIT")
     pdf_page_limit: int = Field(default=0, alias="TENCENT_OCR_PDF_PAGE_LIMIT")
     model_config = SettingsConfigDict(
@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         default=None,
-        help="可选：指定输出目录。默认写入 tests/ocr/output/<时间戳>_<文件名>/",
+        help="可选：指定输出目录。默认写入 .runtime/ocr_output/<时间戳>_<文件名>/",
     )
     parser.add_argument(
         "--page-start",

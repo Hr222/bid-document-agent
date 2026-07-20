@@ -9,7 +9,12 @@ import fitz
 from app.modules.ingestion.pipeline.scan_service import PolicyIngestionService
 
 
-MODULE_PATH = Path(__file__).resolve().parent / "ocr" / "classify_sample_inventory.py"
+MODULE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "tools"
+    / "ocr"
+    / "classify_sample_inventory.py"
+)
 SPEC = importlib.util.spec_from_file_location("classify_sample_inventory", MODULE_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

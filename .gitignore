@@ -4,6 +4,7 @@ env/
 ENV/
 
 .runtime/
+**/ocr/output/
 .idea/
 *.iml
 .vscode/

@@ -78,3 +78,17 @@ def test_online_decision_is_composed_from_knowledge_query_capability() -> None:
     root_source = (APP_ROOT / "composition" / "root.py").read_text(encoding="utf-8")
     assert "build_rule_retrieval_service(\n                self.knowledge_query_capability()" in root_source
     assert "build_decision_service(\n                self.knowledge_query_capability()" in root_source
+
+
+def test_sensitive_ocr_outputs_are_not_kept_in_tests() -> None:
+    assert not (PROJECT_ROOT / "tests" / "ocr").exists()
+    assert not (PROJECT_ROOT / "tests" / "ocr" / "output").exists()
+
+    classifier_source = (PROJECT_ROOT / "tools" / "ocr" / "classify_sample_inventory.py").read_text(
+        encoding="utf-8"
+    )
+    ocr_source = (PROJECT_ROOT / "tools" / "ocr" / "tencent_ocr_mvp.py").read_text(
+        encoding="utf-8"
+    )
+    assert "tests/ocr/output" not in classifier_source
+    assert "tests/ocr/output" not in ocr_source

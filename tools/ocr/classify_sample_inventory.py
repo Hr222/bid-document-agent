@@ -123,7 +123,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         default=None,
-        help="可选：指定输出目录。默认写入 tests/ocr/output/inventory/<时间戳>_<目录名>/",
+        help="可选：指定输出目录。默认写入 .runtime/ocr_inventory/<时间戳>_<目录名>/",
     )
     parser.add_argument(
         "--limit",
@@ -373,7 +373,7 @@ def build_output_dir(source_root: Path, output_dir: str | None) -> Path:
     else:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_name = source_root.name.replace(" ", "_")
-        target = Path("tests/ocr/output/inventory") / f"{stamp}_{safe_name}"
+        target = Path(".runtime/ocr_inventory") / f"{stamp}_{safe_name}"
     target.mkdir(parents=True, exist_ok=True)
     return target
 
