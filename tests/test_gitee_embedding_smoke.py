@@ -5,7 +5,7 @@ from click import echo
 from openai import APIConnectionError
 from openai import OpenAI
 
-from app.core.config import settings
+from app.shared.config import settings
 
 
 @pytest.mark.skipif(

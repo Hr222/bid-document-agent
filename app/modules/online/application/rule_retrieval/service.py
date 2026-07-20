@@ -1,0 +1,178 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+from app.modules.knowledge.ports.read_port import (
+    KnowledgeQuery,
+    KnowledgeQueryResult,
+    KnowledgeQueryTrace,
+    KnowledgeSearchHit,
+)
+from app.modules.online.application.rule_retrieval.contracts import (
+    RetrievalSearcher,
+    RuleRetrievalRequest,
+)
+from app.modules.online.application.rule_retrieval.models import RulePack
+from app.modules.online.contracts import AnswerCitationResult
+from app.modules.online.domain.policy import (
+    CHECKLIST_SCENARIO_REGISTRY,
+    ChecklistScenarioDefinition,
+    ChecklistScenarioRegistry,
+    RuleDrivenChecklistPolicy,
+)
+from app.shared.config import settings
+
+
+class PolicyRuleRetrievalService:
+    """面向业务场景消费检索能力，并输出统一规则包。"""
+
+    def __init__(
+        self,
+        retrieval_service: RetrievalSearcher,
+        *,
+        scenario_registry: ChecklistScenarioRegistry | None = None,
+        checklist_policy: RuleDrivenChecklistPolicy | None = None,
+    ) -> None:
+        self.retrieval_service = retrieval_service
+        self.scenario_registry = scenario_registry or CHECKLIST_SCENARIO_REGISTRY
+        self.checklist_policy = checklist_policy or RuleDrivenChecklistPolicy()
+
+    def retrieve_rule_pack(self, request: RuleRetrievalRequest) -> RulePack:
+        scenario = self.scenario_registry.get(request.scenario_code)
+        raw_result = self.retrieval_service.search(
+            self._build_search_request(request=request, scenario=scenario)
+        )
+        search_result = self._normalize_search_result(
+            raw_result,
+            request=request,
+            scenario=scenario,
+        )
+        checklist_rule_pack = self.checklist_policy.build_rule_pack(
+            scenario=scenario,
+            rule_texts=[hit.chunk_text for hit in search_result.hits],
+        )
+        insufficient_reason = self._build_insufficient_reason(
+            hits=search_result.hits,
+            matched_requirement_count=checklist_rule_pack.matched_requirement_count,
+            min_rule_match_count=scenario.min_rule_match_count,
+        )
+        return RulePack(
+            scenario=scenario,
+            original_query=scenario.retrieval_query,
+            matched_rule_chunks=search_result.hits,
+            citations=self._build_citations(search_result),
+            retrieval_debug=search_result.traces,
+            retrieval_pipeline=search_result.pipeline,
+            retrieval_strategy=search_result.strategy,
+            retrieval_min_score=search_result.min_score,
+            matched_requirement_count=checklist_rule_pack.matched_requirement_count,
+            is_sufficient=checklist_rule_pack.is_sufficient,
+            insufficient_reason=insufficient_reason,
+            checklist_rule_pack=checklist_rule_pack,
+        )
+
+    def _build_search_request(
+        self,
+        *,
+        request: RuleRetrievalRequest,
+        scenario: ChecklistScenarioDefinition,
+    ) -> KnowledgeQuery:
+        return KnowledgeQuery(
+            query=scenario.retrieval_query,
+            top_k=request.top_k,
+            policy_category=scenario.policy_category,
+            document_id=request.document_id,
+            include_history=request.include_history,
+        )
+
+    def _build_citations(
+        self,
+        search_result: KnowledgeQueryResult,
+    ) -> tuple[AnswerCitationResult, ...]:
+        return tuple(
+            AnswerCitationResult(
+                ref_no=index,
+                document_id=hit.document_id,
+                version_id=hit.version_id,
+                chunk_id=hit.chunk_id,
+                policy_name=hit.policy_name,
+                section_title=hit.section_title,
+                page_no=hit.page_no,
+                quote=hit.chunk_text[: settings.rag_max_context_chars_per_chunk],
+            )
+            for index, hit in enumerate(search_result.hits[: settings.rag_answer_top_k], start=1)
+        )
+
+    def _build_insufficient_reason(
+        self,
+        *,
+        hits: Iterable[KnowledgeSearchHit],
+        matched_requirement_count: int,
+        min_rule_match_count: int,
+    ) -> str | None:
+        hit_list = list(hits)
+        if not hit_list:
+            return "当前未检索到可用于该场景判断的规则片段。"
+        if matched_requirement_count < min_rule_match_count:
+            return (
+                "当前命中的规则片段不足以稳定提取完整规则清单，"
+                f"仅识别出 {matched_requirement_count} 项要求，"
+                f"低于最小阈值 {min_rule_match_count}。"
+            )
+        return None
+
+    def _normalize_search_result(
+        self,
+        result: object,
+        *,
+        request: RuleRetrievalRequest,
+        scenario: ChecklistScenarioDefinition,
+    ) -> KnowledgeQueryResult:
+        if isinstance(result, KnowledgeQueryResult):
+            return result
+
+        raw_hits = tuple(getattr(result, "hits", ()))
+        hits = tuple(
+            KnowledgeSearchHit(
+                document_id=hit.document_id,
+                version_id=hit.version_id,
+                chunk_id=hit.chunk_id,
+                policy_name=hit.policy_name,
+                policy_category=hit.policy_category,
+                responsible_department=hit.responsible_department,
+                version_label=hit.version_label,
+                section_title=hit.section_title,
+                section_path=getattr(hit, "section_path", None),
+                page_no=hit.page_no,
+                chunk_text=hit.chunk_text,
+                score=hit.score,
+                rank=getattr(hit, "rank", index),
+                retrieval_source=hit.retrieval_source,
+                score_breakdown=dict(getattr(hit, "score_breakdown", {})),
+            )
+            for index, hit in enumerate(raw_hits, start=1)
+        )
+        debug = getattr(result, "debug", None)
+        traces = tuple(
+            KnowledgeQueryTrace(
+                name=item.name,
+                source=getattr(item, "source", None),
+                input_count=getattr(item, "input_count", None),
+                output_count=getattr(item, "output_count", None),
+                details=dict(getattr(item, "details", {})),
+            )
+            for item in getattr(debug, "stages", ())
+        )
+        return KnowledgeQueryResult(
+            query=getattr(result, "query", scenario.retrieval_query),
+            top_k=getattr(result, "top_k", request.top_k),
+            policy_category=scenario.policy_category,
+            responsible_department=None,
+            document_id=request.document_id,
+            include_history=request.include_history,
+            hits=hits,
+            pipeline=getattr(debug, "pipeline", "unknown"),
+            strategy=getattr(debug, "strategy", "unknown"),
+            min_score=float(getattr(debug, "min_score", 0.0)),
+            traces=traces,
+        )

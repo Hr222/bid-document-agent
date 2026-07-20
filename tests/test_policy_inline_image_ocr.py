@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from app.schemas import ParsedBlock, ParsedDocumentResult
-from app.services.ingestion.steps.policy_ocr import PolicyOcrService
-from app.services.ingestion.steps.policy_parser import PolicyParserService
-from app.services.ingestion.steps.policy_text_assembler import PolicyTextAssemblerService
+from app.interfaces.http.schemas import ParsedBlock, ParsedDocumentResult
+from app.modules.ingestion.pipeline.steps.policy_ocr import PolicyOcrService
+from app.modules.ingestion.pipeline.steps.policy_parser import PolicyParserService
+from app.modules.ingestion.pipeline.steps.policy_text_assembler import PolicyTextAssemblerService
 
 
 def make_block(

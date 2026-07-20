@@ -5,11 +5,14 @@ from time import perf_counter
 
 from fastapi import FastAPI, Request
 
-from app.api.router import api_router
-from app.core.config import settings
-from app.core.logging import configure_logging, get_logger
-from app.db.schema_health import KB_SCHEMA_SETUP_GUIDE, safe_find_missing_kb_tables
-from app.db.session import engine
+from app.infrastructure.persistence.schema_health import (
+    KB_SCHEMA_SETUP_GUIDE,
+    safe_find_missing_kb_tables,
+)
+from app.infrastructure.persistence.session import engine
+from app.interfaces.http.router import api_router
+from app.shared.config import settings
+from app.shared.logging import configure_logging, get_logger
 
 configure_logging(settings.log_level)
 logger = get_logger("app.main")
@@ -26,7 +29,9 @@ def create_app() -> FastAPI:
         )
         missing_tables = safe_find_missing_kb_tables(engine)
         if missing_tables is None:
-            logger.warning("Knowledge base schema check skipped because the database is unavailable.")
+            logger.warning(
+                "Knowledge base schema check skipped because the database is unavailable."
+            )
         elif missing_tables:
             logger.warning(
                 "Knowledge base schema is not ready missing_tables=%s. %s",

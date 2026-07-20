@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import BIGINT, BOOLEAN, DATE, INTEGER, TIMESTAMP, ForeignKey, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.persistence.base import Base
+
+if TYPE_CHECKING:
+    from app.infrastructure.persistence.models.policy_block import PolicyBlock
+    from app.infrastructure.persistence.models.policy_chunk import PolicyChunk
+    from app.infrastructure.persistence.models.policy_document import PolicyDocument
+    from app.infrastructure.persistence.models.policy_section import PolicySection
+
+
+class PolicyVersion(Base):
+    """制度主档下某个源文件对应的版本实体。"""
+
+    __tablename__ = "kb_policy_version"
+
+    # 版本主键 ID
+    id: Mapped[int] = mapped_column(BIGINT, primary_key=True, autoincrement=True)
+
+    # 所属主档 ID
+    policy_id: Mapped[int] = mapped_column(
+        BIGINT,
+        ForeignKey("kb_policy_document.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # 同一主档下递增的版本序号，例如 1、2、3
+    version_seq: Mapped[int] = mapped_column(INTEGER, nullable=False)
+
+    # 版本标签，优先取请求值，否则取源文件最后修改日
+    version_label: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # 源文件年份，通常取文件最后修改时间的年份
+    source_year: Mapped[int | None] = mapped_column(INTEGER)
+
+    # 源文件正文中的制度日期，首版 MVP 暂不抽取
+    source_document_date: Mapped[date | None] = mapped_column(DATE)
+
+    # 发布日期，首版 MVP 暂不抽取
+    issued_at: Mapped[date | None] = mapped_column(DATE)
+
+    # 生效日期，首版 MVP 暂不抽取
+    effective_date: Mapped[date | None] = mapped_column(DATE)
+
+    # 失效日期，首版 MVP 暂不抽取
+    expired_at: Mapped[date | None] = mapped_column(DATE)
+
+    # 上一个版本 ID，用于串起版本链
+    previous_version_id: Mapped[int | None] = mapped_column(BIGINT)
+
+    # 修订类型：首版为 initial，后续通常为 revise
+    revision_type: Mapped[str] = mapped_column(Text, nullable=False, default="revise")
+
+    # 版本状态，首版 MVP 默认使用 draft
+    version_status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")
+
+    # 与上一版相比的变更摘要，首版 MVP 暂不填写
+    change_summary: Mapped[str | None] = mapped_column(Text)
+
+    # 本次修订原因，首版 MVP 暂不填写
+    change_reason: Mapped[str | None] = mapped_column(Text)
+
+    # 源文件原始路径
+    source_path: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # 源文件文件名
+    file_name: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # 源文件扩展名，例如 .docx / .pdf
+    file_ext: Mapped[str | None] = mapped_column(Text)
+
+    # 源文件哈希，用于去重和追踪
+    file_hash: Mapped[str | None] = mapped_column(Text)
+
+    # 是否疑似扫描件
+    is_scanned: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
+
+    # 解析方式，例如 direct / ocr / mixed
+    parse_method: Mapped[str] = mapped_column(Text, nullable=False, default="direct")
+
+    # 原始抽取文本
+    raw_text: Mapped[str | None] = mapped_column(Text)
+
+    # 清洗后的全文文本
+    clean_text: Mapped[str | None] = mapped_column(Text)
+
+    # 页数；DOCX 可能为空，PDF 一般有值
+    page_count: Mapped[int | None] = mapped_column(INTEGER)
+
+    # 解析状态，例如 pending / parsed / failed
+    parser_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+
+    # 版本入库时间
+    ingested_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    # 审核完成时间，首版 MVP 暂未使用
+    reviewed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
+    # 审批通过时间，首版 MVP 暂未使用
+    approved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
+    # 记录创建时间
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    # 记录更新时间
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    document: Mapped["PolicyDocument"] = relationship(back_populates="versions")
+    sections: Mapped[list["PolicySection"]] = relationship(
+        back_populates="version",
+        cascade="all, delete-orphan",
+    )
+    chunks: Mapped[list["PolicyChunk"]] = relationship(
+        back_populates="version",
+        cascade="all, delete-orphan",
+    )
+    blocks: Mapped[list["PolicyBlock"]] = relationship(
+        back_populates="version",
+        cascade="all, delete-orphan",
+    )

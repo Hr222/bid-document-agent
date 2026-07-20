@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from app.core.config import settings
-from app.repositories.policy_repository import RetrievedPolicyChunk
-from app.schemas import RetrievalSearchRequest
-from app.services.retrieval import (
+from app.shared.config import settings
+from app.infrastructure.persistence.repositories.policy_repository import RetrievedPolicyChunk
+from app.interfaces.http.schemas import RetrievalSearchRequest
+from app.modules.knowledge.retrieval import (
     ExactVectorSearchStrategy,
     HnswVectorSearchStrategy,
     HybridRetrievalPipeline,

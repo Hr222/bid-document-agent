@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.repositories.policy_repository import RetrievedPolicyChunk
-from app.services.retrieval import HybridHitFusionService, HybridRetrievalPipeline
+from app.infrastructure.persistence.repositories.policy_repository import RetrievedPolicyChunk
+from app.modules.knowledge.retrieval import HybridHitFusionService, HybridRetrievalPipeline
 
 
 def _hit(

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import fitz
 
-from app.services.ingestion.scan_service import PolicyIngestionService
+from app.modules.ingestion.pipeline.scan_service import PolicyIngestionService
 
 
 MODULE_PATH = Path(__file__).resolve().parent / "ocr" / "classify_sample_inventory.py"

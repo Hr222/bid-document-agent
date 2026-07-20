@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.core.config import settings
-from app.schemas import ParsedBlock, ParsedDocumentResult
-from app.services.ingestion.steps.policy_ocr import PolicyOcrService
+from app.shared.config import settings
+from app.interfaces.http.schemas import ParsedBlock, ParsedDocumentResult
+from app.modules.ingestion.pipeline.steps.policy_ocr import PolicyOcrService
 
 
 def make_block(

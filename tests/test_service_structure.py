@@ -1,16 +1,16 @@
-from app.application import ApplicationContainer
-from app.bridges import PolicyCapabilityBridge
-from app.services.ingestion import (
+from app.composition import ApplicationContainer
+from app.modules.ingestion.pipeline import (
     PolicyIngestionService,
     PolicyPipelineService,
     PolicyUploadService,
 )
-from app.services.policy_data_acquisition import (
+from app.modules.online.application.data_acquisition import (
     ChecklistDataProviderRegistry,
     PolicyDataAcquisitionService,
 )
-from app.services.policy_rule_retrieval import PolicyRuleRetrievalService
-from app.services.retrieval import KnowledgeRetrievalService, RagAnswerService
+from app.modules.online.application.rule_retrieval import PolicyRuleRetrievalService
+from app.modules.knowledge.retrieval import KnowledgeRetrievalService
+from app.infrastructure.llm.rag_answer_generator import RagAnswerGenerator
 
 
 def test_ingestion_services_are_exported_from_new_package() -> None:
@@ -21,7 +21,7 @@ def test_ingestion_services_are_exported_from_new_package() -> None:
 
 def test_retrieval_services_are_exported_from_new_package() -> None:
     assert KnowledgeRetrievalService.__name__ == "KnowledgeRetrievalService"
-    assert RagAnswerService.__name__ == "RagAnswerService"
+    assert RagAnswerGenerator.__name__ == "RagAnswerGenerator"
 
 
 def test_rule_retrieval_services_are_exported_from_new_package() -> None:
@@ -33,6 +33,5 @@ def test_data_acquisition_services_are_exported_from_new_package() -> None:
     assert ChecklistDataProviderRegistry.__name__ == "ChecklistDataProviderRegistry"
 
 
-def test_application_and_bridge_exports_are_available() -> None:
+def test_application_exports_are_available() -> None:
     assert ApplicationContainer.__name__ == "ApplicationContainer"
-    assert PolicyCapabilityBridge.__name__ == "PolicyCapabilityBridge"

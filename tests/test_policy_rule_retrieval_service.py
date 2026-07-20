@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.domain.policy import CHECKLIST_SCENARIO_REGISTRY
-from app.schemas import (
+from app.modules.online.domain.policy import CHECKLIST_SCENARIO_REGISTRY
+from app.interfaces.http.schemas import (
     RetrievalDebugInfo,
     RetrievalFilters,
     RetrievalHit,
     RetrievalSearchResponse,
     RetrievalStageDebug,
 )
-from app.services.policy_rule_retrieval import PolicyRuleRetrievalService, RuleRetrievalRequest
+from app.modules.online.application.rule_retrieval import PolicyRuleRetrievalService, RuleRetrievalRequest
 
 RULE_CHUNK_TEXT = """第十条 评估、拍卖机构自愿参与人民法院委托工作的，应在指定时间到人民法院申请登记，提交相关资料。申请参与委托评估（审计）的机构应提交如下审验资料：
 (1)申请书、登记表及机构简介；

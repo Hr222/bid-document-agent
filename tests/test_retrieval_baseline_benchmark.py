@@ -14,7 +14,7 @@ from app.scripts.run_retrieval_baseline import (
     load_eval_cases,
     build_strategy_summary,
 )
-from app.services.retrieval.vector_search import VectorSearchStrategyName
+from app.modules.knowledge.retrieval.vector_search import VectorSearchStrategyName
 
 
 def make_strategy_case_result(

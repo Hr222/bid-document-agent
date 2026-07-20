@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from app.schemas import (
-    PolicyDecisionChecklistRequest,
+from app.interfaces.http.schemas import (
     RetrievalDebugInfo,
     RetrievalFilters,
     RetrievalHit,
     RetrievalSearchResponse,
     RetrievalStageDebug,
 )
-from app.services.policy_decision import RuleDrivenChecklistDecisionService
+from app.modules.online.application.decision import RuleDrivenChecklistDecisionService
+from app.modules.online.domain.decision_result import DecisionReviewCommand
 
 
 RULE_CHUNK_TEXT = """第十条 评估、拍卖机构自愿参与人民法院委托工作的，应在指定时间到人民法院申请登记，提交相关资料。申请参与委托评估（审计）的机构应提交如下审验资料：
@@ -79,9 +79,9 @@ def _make_hit(chunk_text: str) -> RetrievalHit:
 def test_rule_driven_checklist_reports_missing_materials() -> None:
     service = RuleDrivenChecklistDecisionService(FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]))
 
-    response = service.review_court_evaluation_materials(
-        PolicyDecisionChecklistRequest(
-            submitted_materials=[
+    response = service.review(
+        DecisionReviewCommand(
+            submitted_materials=(
                 "申请书",
                 "机构简介",
                 "营业执照副本",
@@ -91,12 +91,12 @@ def test_rule_driven_checklist_reports_missing_materials() -> None:
                 "相关资质说明",
                 "营业场所证明",
                 "纳税证明",
-            ]
+            )
         )
     )
 
     assert response.decision == "fail"
-    assert response.missing_input_fields == []
+    assert response.missing_input_fields == ()
     assert "资格证书副本" in response.missing_fields
     assert "注资证明及资产明细表" in response.missing_fields
     assert "法院指定提交的其他资料" in response.missing_fields
@@ -107,9 +107,9 @@ def test_rule_driven_checklist_reports_missing_materials() -> None:
 def test_rule_driven_checklist_passes_when_all_materials_exist() -> None:
     service = RuleDrivenChecklistDecisionService(FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]))
 
-    response = service.review_court_evaluation_materials(
-        PolicyDecisionChecklistRequest(
-            submitted_materials=[
+    response = service.review(
+        DecisionReviewCommand(
+            submitted_materials=(
                 "申请书",
                 "机构简介",
                 "企业法人营业执照副本",
@@ -123,13 +123,13 @@ def test_rule_driven_checklist_passes_when_all_materials_exist() -> None:
                 "资产明细表",
                 "纳税证明",
                 "法院指定资料",
-            ]
+            )
         )
     )
 
     assert response.decision == "pass"
-    assert response.missing_input_fields == []
-    assert response.missing_fields == []
+    assert response.missing_input_fields == ()
+    assert response.missing_fields == ()
     assert len(response.used_fields) == 8
 
 
@@ -138,24 +138,24 @@ def test_rule_driven_checklist_returns_insufficient_evidence_for_partial_rule_te
         FakeRetrievalService([_make_hit("申请参与委托评估的机构应提交资料，具体要求以法院通知为准。")])
     )
 
-    response = service.review_court_evaluation_materials(
-        PolicyDecisionChecklistRequest(submitted_materials=["申请书", "营业执照副本"])
+    response = service.review(
+        DecisionReviewCommand(submitted_materials=("申请书", "营业执照副本"))
     )
 
     assert response.decision == "insufficient_evidence"
-    assert response.used_fields == []
-    assert response.missing_input_fields == []
-    assert response.missing_fields == []
+    assert response.used_fields == ()
+    assert response.missing_input_fields == ()
+    assert response.missing_fields == ()
     assert response.debug.matched_rule_requirement_count < 8
 
 
 def test_rule_driven_checklist_returns_insufficient_evidence_for_missing_business_input() -> None:
     service = RuleDrivenChecklistDecisionService(FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]))
 
-    response = service.review_court_evaluation_materials(PolicyDecisionChecklistRequest())
+    response = service.review(DecisionReviewCommand(submitted_materials_provided=False))
 
     assert response.decision == "insufficient_evidence"
-    assert response.used_fields == []
-    assert response.missing_input_fields == ["已提交材料列表"]
-    assert response.missing_fields == []
-    assert response.debug.data_acquisition.missing_input_fields == ["已提交材料列表"]
+    assert response.used_fields == ()
+    assert response.missing_input_fields == ("已提交材料列表",)
+    assert response.missing_fields == ()
+    assert response.debug.data_acquisition.missing_input_fields == ("已提交材料列表",)

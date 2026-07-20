@@ -4,9 +4,9 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from app.core.config import settings
-from app.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
-from app.repositories.policy_repository import PolicyRepository
+from app.shared.config import settings
+from app.infrastructure.persistence.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
+from app.infrastructure.persistence.repositories.policy_repository import PolicyRepository
 from tests.db_test_utils import SchemaHarness
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.schemas.policy_decision import PolicyDecisionChecklistRequest
-from app.services.policy_data_acquisition import (
+from app.interfaces.http.schemas.policy_decision import PolicyDecisionChecklistRequest
+from app.modules.online.application.data_acquisition import (
     ChecklistDataAcquisitionRequest,
     ChecklistDataProviderRegistry,
     InlineChecklistDataProvider,

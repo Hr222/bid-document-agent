@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domain.policy.rules import PolicyRetrievalQueryPolicy
+from app.modules.online.domain.policy.rules import PolicyRetrievalQueryPolicy
 
 
 def test_build_keyword_plan_keeps_year_and_document_type_as_priority_keywords() -> None:

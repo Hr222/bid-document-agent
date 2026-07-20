@@ -8,15 +8,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
 
-from app.db.session import SessionLocal
-from app.repositories.policy_repository import PolicyRepository
-from app.schemas import RetrievalSearchRequest, RetrievalStageDebug
-from app.services.retrieval import HybridRetrievalPipeline, KnowledgeRetrievalService
-from app.services.retrieval.vector_search import (
+from app.infrastructure.llm.embedding_client import GiteeEmbeddingClient
+from app.infrastructure.persistence.repositories.policy_repository import PolicyRepository
+from app.infrastructure.persistence.session import SessionLocal
+from app.modules.knowledge.ports.read_port import KnowledgeQuery, KnowledgeQueryTrace
+from app.modules.knowledge.retrieval import HybridRetrievalPipeline, KnowledgeRetrievalService
+from app.modules.knowledge.retrieval.vector_search import (
     VectorSearchStrategyName,
     build_vector_search_strategy,
 )
-
 
 DEFAULT_BENCHMARK_STRATEGIES: tuple[VectorSearchStrategyName, ...] = ("exact", "hnsw")
 
@@ -180,14 +180,15 @@ def build_retrieval_service(
     repository = PolicyRepository(session)
     pipeline = HybridRetrievalPipeline(
         repository=repository,
+        embedding_service=GiteeEmbeddingClient(),
         vector_search_strategy=build_vector_search_strategy(strategy_name),
     )
     return session, KnowledgeRetrievalService(repository, pipeline=pipeline)
 
 
 def extract_vector_trace(
-    stages: list[RetrievalStageDebug],
-) -> RetrievalStageDebug | None:
+    stages: tuple[KnowledgeQueryTrace, ...],
+) -> KnowledgeQueryTrace | None:
     """提取向量召回阶段的调试信息，便于确认实际走到的策略。"""
 
     return next((stage for stage in stages if stage.name == "vector_recall"), None)
@@ -234,7 +235,7 @@ def run_single_case(
 
     started_at = perf_counter()
     response = service.search(
-        RetrievalSearchRequest(
+        KnowledgeQuery(
             query=case.query,
             top_k=top_k,
         )
@@ -254,7 +255,7 @@ def run_single_case(
     ]
     top1 = response.hits[0] if response.hits else None
     top3 = response.hits[:3]
-    vector_trace = extract_vector_trace(response.debug.stages)
+    vector_trace = extract_vector_trace(response.traces)
     expected_document_rank = next(
         (
             hit.rank
@@ -279,7 +280,7 @@ def run_single_case(
 
     return StrategyCaseResult(
         strategy=strategy_name,
-        pipeline_strategy=response.debug.strategy,
+        pipeline_strategy=response.strategy,
         vector_trace_source=vector_trace.source if vector_trace else None,
         elapsed_ms=elapsed_ms,
         hit_count=len(response.hits),
