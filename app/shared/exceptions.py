@@ -1,6 +1,6 @@
 class UpstreamServiceError(RuntimeError):
-    """Raised when an external model provider request fails."""
+    """外部模型或服务提供方请求失败时抛出的异常。"""
 
 
 class ServiceNotConfiguredError(RuntimeError):
-    """Raised when a feature depends on missing server-side configuration."""
+    """功能依赖的服务端配置缺失时抛出的异常。"""

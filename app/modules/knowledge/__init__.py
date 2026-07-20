@@ -6,10 +6,12 @@ from app.modules.knowledge.application.publication_service import (
     KnowledgePublicationService,
 )
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability
+from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 
 __all__ = [
     "KnowledgeBaseQueryCapability",
     "KnowledgeBaseService",
     "KnowledgePublicationResult",
     "KnowledgePublicationService",
+    "KnowledgeBaseWriteCapability",
 ]

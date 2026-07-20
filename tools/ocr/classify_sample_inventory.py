@@ -189,6 +189,7 @@ def analyze_pdf_text(path: Path, sample_pages: int = 3) -> PdfTextSignal:
             page_text_lengths=page_text_lengths,
             pdf_kind=pdf_kind,
         )
+    # 单个 PDF 抽样失败时返回可展示的错误信号，不阻断整个目录分类任务。 pragma: no cover
     except Exception as exc:  # pragma: no cover
         return PdfTextSignal(
             total_pages=0,

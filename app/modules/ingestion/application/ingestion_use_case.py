@@ -11,7 +11,9 @@ class IngestionUseCase:
         self.pipeline = pipeline
 
     def preview(self, request: PolicyPipelineRequest) -> PolicyPipelineResponse:
+        """执行不写入知识库的预览链路。"""
         return self.pipeline.preview(request)
 
     def ingest(self, request: PolicyPipelineRequest) -> PolicyPipelineResponse:
+        """执行包含知识库写入的完整入库链路。"""
         return self.pipeline.ingest(request)

@@ -15,7 +15,7 @@ async function parseError(response: Response): Promise<string> {
       return payload.detail;
     }
   } catch {
-    // ignore JSON parse failure and fall back to generic text
+    // 错误响应不是 JSON 时，回退到状态码对应的通用提示。
   }
 
   return `${UI_TEXT.requestFailed}: ${response.status}`;

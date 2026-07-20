@@ -25,9 +25,11 @@ class RagApplicationFacade:
         self.answer_generator = answer_generator
 
     def search(self, command: AskKnowledgeCommand) -> KnowledgeQueryResult:
+        """通过知识查询能力执行检索，供 search 和 ask 共享同一条链路。"""
         return self.knowledge_query.search(command.as_knowledge_query())
 
     def ask(self, command: AskKnowledgeCommand) -> AnswerResult:
+        """先获取可引用证据，命中后再调用回答生成端口。"""
         knowledge = self.search(command)
         if not knowledge.hits:
             return AnswerResult(

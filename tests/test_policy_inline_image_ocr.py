@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from app.interfaces.http.schemas import ParsedBlock, ParsedDocumentResult
 from app.infrastructure.ocr.tencent_ocr import PolicyOcrService
+from app.modules.ingestion.contracts import ParsedBlock, ParsedDocumentResult
 from app.modules.ingestion.pipeline.steps.policy_parser import PolicyParserService
 from app.modules.ingestion.pipeline.steps.policy_text_assembler import PolicyTextAssemblerService
 

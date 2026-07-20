@@ -1,49 +1,37 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.exc import ProgrammingError
 
-from app.composition import ApplicationContainer
+from app.infrastructure.filesystem.upload_service import PolicyUploadService
 from app.infrastructure.persistence.schema_health import (
     KB_SCHEMA_SETUP_GUIDE,
     is_missing_kb_schema_error,
 )
+from app.interfaces.http.assemblers.policy_pipeline import pipeline_command, pipeline_response
 from app.interfaces.http.dependencies import (
-    get_application_container,
-    get_stateless_application_container,
+    get_ingestion_preview_use_case,
+    get_ingestion_use_case,
+    get_policy_upload_service,
 )
 from app.interfaces.http.schemas import PolicyPipelineRequest, PolicyPipelineResponse
 from app.interfaces.http.schemas.policy_upload import (
     PolicyUploadIngestRequest,
     PolicyUploadPreviewResponse,
 )
+from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
 from app.shared.logging import get_logger
 
 router = APIRouter()
 logger = get_logger("app.interfaces.http.policy_pipeline")
 
 
-def _validate_target_document_id(
-    container: ApplicationContainer,
-    target_document_id: int | None,
-) -> None:
-    if target_document_id is None:
-        return
-    if container.knowledge_document_exists(target_document_id):
-        return
-    raise HTTPException(
-        status_code=400,
-        detail="指定的已有关联制度不存在，可能是数据库已重建或记录已被删除，请重新选择后再试。",
-    )
-
-
 @router.post("/policy-pipeline/preview", response_model=PolicyPipelineResponse)
 async def preview_policy_pipeline(
     request: PolicyPipelineRequest,
-    container: ApplicationContainer = Depends(get_stateless_application_container),
+    use_case: IngestionUseCase = Depends(get_ingestion_preview_use_case),
 ) -> PolicyPipelineResponse:
     """执行预览流水线，不写入数据库。"""
-    service = container.policy_pipeline_preview_service()
     try:
-        return service.preview(request)
+        return pipeline_response(use_case.preview(pipeline_command(request)))
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -51,17 +39,15 @@ async def preview_policy_pipeline(
 @router.post("/policy-pipeline/ingest", response_model=PolicyPipelineResponse)
 async def ingest_policy_pipeline(
     request: PolicyPipelineRequest,
-    container: ApplicationContainer = Depends(get_application_container),
+    use_case: IngestionUseCase = Depends(get_ingestion_use_case),
 ) -> PolicyPipelineResponse:
     """执行完整流水线，并写入制度文档、版本、章节和切块。"""
-    _validate_target_document_id(container, request.target_document_id)
-    service = container.policy_pipeline_ingest_service()
     try:
-        return service.ingest(request)
+        return pipeline_response(use_case.ingest(pipeline_command(request)))
     except ProgrammingError as exc:
         if is_missing_kb_schema_error(exc):
             logger.exception(
-                "Knowledge base schema missing during ingest path=%s", request.source_path
+                "知识库表结构缺失，入库失败 path=%s", request.source_path
             )
             raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
         raise
@@ -75,23 +61,34 @@ async def preview_policy_pipeline_upload(
     policy_category: str = Form("管理制度"),
     responsible_department: str | None = Form(None),
     version_label: str | None = Form(None),
-    container: ApplicationContainer = Depends(get_stateless_application_container),
+    upload_service: PolicyUploadService = Depends(get_policy_upload_service),
+    use_case: IngestionUseCase = Depends(get_ingestion_preview_use_case),
 ) -> PolicyUploadPreviewResponse:
-    upload_service = container.policy_upload_service()
-    pipeline_service = container.policy_pipeline_preview_service()
+    """接收 multipart 文件，暂存后交给入库预览用例。"""
+    staged = None
     try:
-        staged = upload_service.stage_upload(file)
-        response = pipeline_service.preview(
-            PolicyPipelineRequest(
-                source_path=staged.stored_path,
-                policy_category=policy_category,
-                responsible_department=responsible_department,
-                version_label=version_label,
-                target_document_id=None,
+        staged = upload_service.stage_upload(
+            file_name=file.filename,
+            file_stream=file.file,
+        )
+        response = use_case.preview(
+            pipeline_command(
+                PolicyPipelineRequest(
+                    source_path=staged.stored_path,
+                    policy_category=policy_category,
+                    responsible_department=responsible_department,
+                    version_label=version_label,
+                    target_document_id=None,
+                )
             )
         )
-        return PolicyUploadPreviewResponse(**response.model_dump(), upload_id=staged.upload_id)
+        return PolicyUploadPreviewResponse(
+            **pipeline_response(response).model_dump(),
+            upload_id=staged.upload_id,
+        )
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
+        if staged is not None:
+            upload_service.discard_upload(staged.upload_id)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         await file.close()
@@ -100,26 +97,31 @@ async def preview_policy_pipeline_upload(
 @router.post("/policy-pipeline/ingest-upload", response_model=PolicyPipelineResponse)
 async def ingest_policy_pipeline_upload(
     request: PolicyUploadIngestRequest,
-    container: ApplicationContainer = Depends(get_application_container),
+    upload_service: PolicyUploadService = Depends(get_policy_upload_service),
+    use_case: IngestionUseCase = Depends(get_ingestion_use_case),
 ) -> PolicyPipelineResponse:
-    upload_service = container.policy_upload_service()
-    _validate_target_document_id(container, request.target_document_id)
-    service = container.policy_pipeline_ingest_service()
+    """根据暂存 ID 找回文件，入库成功后删除对应暂存目录。"""
     try:
         source_path = upload_service.resolve_upload(request.upload_id)
-        return service.ingest(
-            PolicyPipelineRequest(
-                source_path=source_path,
-                policy_category=request.policy_category,
-                responsible_department=request.responsible_department,
-                version_label=request.version_label,
-                target_document_id=request.target_document_id,
+        response = pipeline_response(
+            use_case.ingest(
+                pipeline_command(
+                    PolicyPipelineRequest(
+                        source_path=source_path,
+                        policy_category=request.policy_category,
+                        responsible_department=request.responsible_department,
+                        version_label=request.version_label,
+                        target_document_id=request.target_document_id,
+                    )
+                )
             )
         )
+        upload_service.discard_upload(request.upload_id)
+        return response
     except ProgrammingError as exc:
         if is_missing_kb_schema_error(exc):
             logger.exception(
-                "Knowledge base schema missing during ingest upload upload_id=%s",
+                "知识库表结构缺失，上传入库失败 upload_id=%s",
                 request.upload_id,
             )
             raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc

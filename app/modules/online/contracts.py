@@ -7,6 +7,7 @@ from app.modules.knowledge.ports.read_port import (
     KnowledgeQueryResult,
     KnowledgeSearchHit,
 )
+from app.modules.online.domain.citation import AnswerCitationResult
 
 
 @dataclass(slots=True, frozen=True)
@@ -37,15 +38,3 @@ class AnswerResult:
     citations: tuple[AnswerCitationResult, ...]
     hits: tuple[KnowledgeSearchHit, ...]
     knowledge: KnowledgeQueryResult | None
-
-
-@dataclass(slots=True, frozen=True)
-class AnswerCitationResult:
-    ref_no: int
-    document_id: int
-    version_id: int
-    chunk_id: int
-    policy_name: str
-    section_title: str | None
-    page_no: int | None
-    quote: str

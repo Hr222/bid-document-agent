@@ -1,3 +1,5 @@
+"""在线应用模块的 Composition Root，负责组装 RAG 外观和规则决策服务。"""
+
 from __future__ import annotations
 
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability

@@ -53,9 +53,6 @@ class PolicyPersistenceGateway:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def document_exists(self, document_id: int) -> bool:
-        return self.session.get(PolicyDocument, document_id) is not None
-
     def save_document_version_blocks_sections_and_chunks(
         self,
         *,

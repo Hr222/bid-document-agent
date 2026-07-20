@@ -7,7 +7,7 @@ _CONFIGURED = False
 
 
 def configure_logging(level: str = "INFO") -> None:
-    """Configure console logging for application and uvicorn loggers."""
+    """为应用和 Uvicorn 日志器配置控制台日志。"""
     global _CONFIGURED
     if _CONFIGURED:
         return

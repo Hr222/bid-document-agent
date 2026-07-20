@@ -136,6 +136,8 @@ class PolicyDecisionResultBuilder:
         requirement_statuses: tuple[RequirementStatusResult, ...],
         debug: DecisionDebugResult,
     ) -> DecisionResult:
+        # 决策值由领域服务限制为 pass / fail / insufficient_evidence，
+        # 这里仅将字符串结果装配到领域结果对象。
         return DecisionResult(
             scenario_code=self.scenario.scenario_code,
             scenario_name=self.scenario.scenario_name,

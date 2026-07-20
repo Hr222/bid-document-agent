@@ -179,6 +179,8 @@ class PolicyOcrService:
         if failed_blocks and persist:
             notes.append("部分图片块 OCR 失败；若无法形成有效正文，入库阶段会终止。")
 
+        # 上游 OCR 分支只会产生 direct / ocr / mixed 三种受支持值，
+        # 此处保留类型检查豁免，避免把运行期解析结果重复转换成另一套 DTO。
         return OcrProcessResult(
             applied=succeeded_blocks > 0,
             parse_method=parse_method,  # type: ignore[arg-type]

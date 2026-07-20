@@ -21,27 +21,26 @@ logger = get_logger("app.main")
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        # 应用启动时只做轻量表结构检查，不主动创建或修改数据库结构。
         logger.info(
-            "Starting FastAPI app name=%s version=%s log_level=%s",
+            "启动 FastAPI 应用 name=%s version=%s log_level=%s",
             settings.app_name,
             settings.app_version,
             settings.log_level.upper(),
         )
         missing_tables = safe_find_missing_kb_tables(engine)
         if missing_tables is None:
-            logger.warning(
-                "Knowledge base schema check skipped because the database is unavailable."
-            )
+            logger.warning("数据库不可用，已跳过知识库表结构检查。")
         elif missing_tables:
             logger.warning(
-                "Knowledge base schema is not ready missing_tables=%s. %s",
+                "知识库表结构未就绪 missing_tables=%s。%s",
                 ",".join(missing_tables),
                 KB_SCHEMA_SETUP_GUIDE,
             )
         else:
-            logger.info("Knowledge base schema check passed.")
+            logger.info("知识库表结构检查通过。")
         yield
-        logger.info("Shutting down FastAPI app name=%s", settings.app_name)
+        logger.info("关闭 FastAPI 应用 name=%s", settings.app_name)
 
     application = FastAPI(
         title=settings.app_name,
@@ -53,6 +52,7 @@ def create_app() -> FastAPI:
 
     @application.middleware("http")
     async def log_requests(request: Request, call_next):
+        # 统一记录请求耗时和状态，便于定位接口层、应用层或基础设施层的失败。
         started = perf_counter()
         client_host = request.client.host if request.client else "-"
         path = request.url.path
@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
         except Exception:
             duration_ms = (perf_counter() - started) * 1000
             logger.exception(
-                "Unhandled request error method=%s path=%s client=%s duration_ms=%.2f",
+                "未处理的请求异常 method=%s path=%s client=%s duration_ms=%.2f",
                 request.method,
                 path,
                 client_host,

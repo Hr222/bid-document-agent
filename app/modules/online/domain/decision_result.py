@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from app.modules.online.contracts import AnswerCitationResult
+from app.modules.online.domain.citation import AnswerCitationResult
 
 
 @dataclass(slots=True, frozen=True)

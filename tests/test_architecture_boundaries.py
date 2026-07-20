@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = PROJECT_ROOT / "app"
 
@@ -37,10 +36,37 @@ def test_online_domain_does_not_depend_on_external_adapters() -> None:
         "app.infrastructure",
         "app.interfaces",
         "app.modules.knowledge",
+        "app.modules.online.contracts",
         "langchain",
         "langgraph",
     )
-    assert not any(module.startswith(forbidden) for module in imported for forbidden in forbidden_prefixes)
+    assert not any(
+        module.startswith(forbidden)
+        for module in imported
+        for forbidden in forbidden_prefixes
+    )
+
+
+def test_http_schemas_do_not_reuse_ingestion_contracts() -> None:
+    imported = _imported_modules(APP_ROOT / "interfaces" / "http" / "schemas")
+
+    assert not any(
+        module.startswith("app.modules.ingestion.contracts")
+        for module in imported
+    )
+
+
+def test_http_ingestion_routes_use_application_use_cases() -> None:
+    route_imports = _imported_modules(APP_ROOT / "interfaces" / "http" / "routes")
+
+    assert "app.modules.ingestion.application.ingestion_use_case" in route_imports
+    assert "app.interfaces.http.assemblers.policy_pipeline" in route_imports
+    assert "app.interfaces.http.assemblers.policy_ingestion" in route_imports
+    assert "app.interfaces.http.assemblers.publication" in route_imports
+    assert not any(
+        module.startswith("app.modules.ingestion.pipeline")
+        for module in route_imports
+    )
 
 
 def test_targeted_architecture_packages_exist_and_old_packages_are_gone() -> None:
@@ -76,8 +102,14 @@ def test_targeted_architecture_packages_exist_and_old_packages_are_gone() -> Non
 
 def test_online_decision_is_composed_from_knowledge_query_capability() -> None:
     root_source = (APP_ROOT / "composition" / "root.py").read_text(encoding="utf-8")
-    assert "build_rule_retrieval_service(\n                self.knowledge_query_capability()" in root_source
-    assert "build_decision_service(\n                self.knowledge_query_capability()" in root_source
+    assert (
+        "build_rule_retrieval_service(\n                self.knowledge_query_capability()"
+        in root_source
+    )
+    assert (
+        "build_decision_service(\n                self.knowledge_query_capability()"
+        in root_source
+    )
 
 
 def test_sensitive_ocr_outputs_are_not_kept_in_tests() -> None:

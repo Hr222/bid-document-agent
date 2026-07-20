@@ -6,14 +6,12 @@ from sqlalchemy.orm import Session
 from app.composition import ApplicationContainer
 from app.infrastructure.filesystem.upload_service import PolicyUploadService
 from app.infrastructure.persistence.session import SessionLocal
-from app.modules.ingestion import (
-    PolicyIngestionService,
-    PolicyPipelineService,
-)
+from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
+from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
+from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.application.policy_decision import PolicyDecisionApplicationService
-from app.modules.online.application.rag_facade import RagApplicationFacade
 
 
 def get_db_session() -> Generator[Session, None, None]:
@@ -37,11 +35,11 @@ def get_stateless_application_container() -> ApplicationContainer:
     return ApplicationContainer()
 
 
-def get_rag_application_facade(
+def get_ask_knowledge_use_case(
     container: ApplicationContainer = Depends(get_application_container),
-) -> RagApplicationFacade:
-    """提供在线 RAG 应用外观层，HTTP 与 Agent 共用同一入口。"""
-    return container.rag_application_facade()
+) -> AskKnowledgeUseCase:
+    """提供在线知识问答应用用例。"""
+    return container.ask_knowledge_use_case()
 
 
 def get_policy_decision_application_service(
@@ -58,18 +56,18 @@ def get_knowledge_publication_service(
     return container.knowledge_publication_service()
 
 
-def get_policy_pipeline_preview_service(
+def get_ingestion_preview_use_case(
     container: ApplicationContainer = Depends(get_stateless_application_container),
-) -> PolicyPipelineService:
-    """提供预览模式流水线服务。"""
-    return container.policy_pipeline_preview_service()
+) -> IngestionUseCase:
+    """提供文档入库预览用例。"""
+    return container.ingestion_preview_use_case()
 
 
-def get_policy_pipeline_ingest_service(
+def get_ingestion_use_case(
     container: ApplicationContainer = Depends(get_application_container),
-) -> PolicyPipelineService:
-    """提供入库模式流水线服务。"""
-    return container.policy_pipeline_ingest_service()
+) -> IngestionUseCase:
+    """提供文档入库用例。"""
+    return container.ingestion_use_case()
 
 
 def get_policy_upload_service(
@@ -79,11 +77,11 @@ def get_policy_upload_service(
     return container.policy_upload_service()
 
 
-def get_policy_ingestion_service(
+def get_policy_candidate_scan_use_case(
     container: ApplicationContainer = Depends(get_stateless_application_container),
-) -> PolicyIngestionService:
-    """提供候选文件扫描服务。"""
-    return container.policy_ingestion_service()
+) -> PolicyCandidateScanUseCase:
+    """提供候选文件扫描用例。"""
+    return container.policy_candidate_scan_use_case()
 
 
 def get_knowledge_base_service(

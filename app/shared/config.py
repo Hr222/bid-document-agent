@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api/v1"
     policy_pipeline_workspace: str = ".runtime/policy_pipeline"
+    policy_upload_max_size_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+    policy_upload_retention_seconds: int = Field(default=24 * 60 * 60, gt=0)
 
     postgres_driver: str = "postgresql+psycopg"
     postgres_db: str = "bid_document_agent"

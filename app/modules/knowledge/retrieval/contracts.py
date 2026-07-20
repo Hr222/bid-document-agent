@@ -6,7 +6,7 @@ from typing import Protocol
 
 @dataclass(slots=True)
 class RetrievedPolicyChunk:
-    """妫€绱㈠眰涓庢寔久鍖栭€傞厤鍣ㄤ箣闂寸殑鏈€灏忔煡璇㈢粨鏋滃悎绾︺€?"""
+    """检索层与持久化适配器之间的最小查询结果契约。"""
 
     document_id: int
     version_id: int

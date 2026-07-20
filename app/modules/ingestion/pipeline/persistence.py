@@ -10,15 +10,15 @@ from app.modules.ingestion.contracts import (
     SectionSplitResult,
 )
 from app.modules.ingestion.pipeline.context import PipelineContext
-from app.modules.knowledge.ports.write_port import KnowledgeWritePort
+from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 from app.shared.logging import get_logger
 
 logger = get_logger("app.pipeline.persistence")
 
 
 class PolicyPersistenceService:
-    def __init__(self, repository: KnowledgeWritePort) -> None:
-        self.repository = repository
+    def __init__(self, write_capability: KnowledgeBaseWriteCapability) -> None:
+        self.write_capability = write_capability
 
     def persist(self, context: PipelineContext) -> PersistenceResult:
         policy_name = context.policy_name_guess
@@ -45,7 +45,7 @@ class PolicyPersistenceService:
             len(chunk_result.chunks),
         )
 
-        persisted = self.repository.save_document_version_blocks_sections_and_chunks(
+        persisted = self.write_capability.write(
             policy_name=policy_name,
             policy_category=context.request.policy_category,
             responsible_department=context.request.responsible_department,

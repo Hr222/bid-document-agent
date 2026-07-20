@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.shared.config import settings
-from app.interfaces.http.schemas import ParsedBlock, ParsedDocumentResult
 from app.infrastructure.ocr.tencent_ocr import PolicyOcrService
+from app.modules.ingestion.contracts import ParsedBlock, ParsedDocumentResult
+from app.shared.config import settings
 
 
 def make_block(

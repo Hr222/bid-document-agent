@@ -91,7 +91,8 @@ app/
 │   ├── knowledge/                        # 知识能力层
 │   │   ├── application/
 │   │   │   ├── query_capability.py
-│   │   │   └── publication_service.py
+│   │   │   ├── publication_service.py
+│   │   │   └── write_capability.py
 │   │   ├── domain/
 │   │   │   ├── knowledge_version.py
 │   │   │   └── publication_state.py
@@ -107,7 +108,8 @@ app/
 │   │
 │   └── ingestion/                        # 独立文档入库层
 │       ├── application/
-│       │   └── ingestion_use_case.py
+│       │   ├── ingestion_use_case.py
+│       │   └── scan_candidates.py
 │       ├── domain/
 │       │   └── policies.py
 │       ├── ports/

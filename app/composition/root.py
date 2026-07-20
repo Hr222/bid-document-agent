@@ -4,13 +4,20 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.composition.ingestion import build_ingestion_service, build_pipeline, build_upload_service
+from app.composition.ingestion import (
+    build_ingestion_service,
+    build_ingestion_use_case,
+    build_pipeline,
+    build_policy_candidate_scan_use_case,
+    build_upload_service,
+)
 from app.composition.knowledge import (
     build_knowledge_base_service,
     build_persistence_gateway,
     build_publication_service,
     build_query_capability,
     build_read_repository,
+    build_write_capability,
     build_write_repository,
 )
 from app.composition.online import (
@@ -34,12 +41,13 @@ from app.infrastructure.persistence.repositories.policy_persistence_gateway impo
     PolicyPersistenceGateway,
 )
 from app.interfaces.agent import FunctionCallingAdapter
-from app.modules.ingestion.pipeline import (
-    PolicyIngestionService,
-    PolicyPipelineService,
-)
+from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
+from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
+from app.modules.ingestion.pipeline import PolicyIngestionService
 from app.modules.knowledge import KnowledgeBaseQueryCapability, KnowledgePublicationService
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
+from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
+from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.application.data_acquisition import (
     ChecklistDataProviderRegistry,
     InlineChecklistDataProvider,
@@ -61,7 +69,11 @@ from app.shared.config import settings
 
 
 class ApplicationContainer:
-    """Composition Root，只负责装配端口、适配器与应用用例。"""
+    """Composition Root，只负责装配端口、适配器与应用用例。
+
+    所有具体基础设施实现都在这里实例化，业务模块只接收能力端口，
+    这样 HTTP、Agent 和测试替身可以共享同一套应用层装配规则。
+    """
 
     def __init__(
         self,
@@ -79,6 +91,7 @@ class ApplicationContainer:
         self._answer_service = answer_service
         self._persistence_gateway: PolicyPersistenceGateway | None = None
         self._write_repository: KnowledgeWriteRepository | None = None
+        self._write_capability: KnowledgeBaseWriteCapability | None = None
         self._read_repository: KnowledgeReadRepository | None = None
         self._rule_retrieval_service: PolicyRuleRetrievalService | None = None
         self._data_acquisition_service: PolicyDataAcquisitionService | None = None
@@ -87,10 +100,12 @@ class ApplicationContainer:
         self._knowledge_query: KnowledgeBaseQueryCapability | None = None
         self._rag_facade: RagApplicationFacade | None = None
         self._publication_service: KnowledgePublicationService | None = None
-        self._pipeline_preview_service: PolicyPipelineService | None = None
-        self._pipeline_ingest_service: PolicyPipelineService | None = None
+        self._ingestion_preview_use_case: IngestionUseCase | None = None
+        self._ingestion_use_case: IngestionUseCase | None = None
+        self._ask_knowledge_use_case: AskKnowledgeUseCase | None = None
         self._policy_upload_service: PolicyUploadService | None = None
         self._policy_ingestion_service: PolicyIngestionService | None = None
+        self._policy_candidate_scan_use_case: PolicyCandidateScanUseCase | None = None
         self._knowledge_base_service: KnowledgeBaseService | None = None
         self._embedding_service: GiteeEmbeddingClient | None = None
         self._file_service: PolicyFileService | None = None
@@ -118,13 +133,15 @@ class ApplicationContainer:
             self._persistence_gateway = build_persistence_gateway(self.session)
         return self._persistence_gateway
 
-    def knowledge_document_exists(self, document_id: int) -> bool:
-        return self.persistence_gateway().document_exists(document_id)
-
     def knowledge_write_repository(self) -> KnowledgeWriteRepository:
         if self._write_repository is None:
             self._write_repository = build_write_repository(self.persistence_gateway())
         return self._write_repository
+
+    def knowledge_write_capability(self) -> KnowledgeBaseWriteCapability:
+        if self._write_capability is None:
+            self._write_capability = build_write_capability(self.knowledge_write_repository())
+        return self._write_capability
 
     def knowledge_read_repository(self) -> KnowledgeReadRepository:
         if self._read_repository is None:
@@ -146,6 +163,7 @@ class ApplicationContainer:
 
     def rag_application_facade(self) -> RagApplicationFacade:
         if self._rag_facade is None:
+            # 未注入测试替身时延迟创建 LLM 客户端，保证只使用检索能力的接口不被配置阻塞。
             if self._answer_service is not None:
                 answer_generator = self._answer_service
             else:
@@ -153,8 +171,13 @@ class ApplicationContainer:
             self._rag_facade = build_rag_facade(self.knowledge_query_capability(), answer_generator)
         return self._rag_facade
 
+    def ask_knowledge_use_case(self) -> AskKnowledgeUseCase:
+        if self._ask_knowledge_use_case is None:
+            self._ask_knowledge_use_case = AskKnowledgeUseCase(self.rag_application_facade())
+        return self._ask_knowledge_use_case
+
     def function_calling_adapter(self) -> FunctionCallingAdapter:
-        return FunctionCallingAdapter(self.rag_application_facade())
+        return FunctionCallingAdapter(self.ask_knowledge_use_case())
 
     def checklist_data_provider_registry(self) -> ChecklistDataProviderRegistry:
         if self._data_provider_registry is None:
@@ -205,23 +228,27 @@ class ApplicationContainer:
             )
         return self._publication_service
 
-    def policy_pipeline_preview_service(self) -> PolicyPipelineService:
-        if self._pipeline_preview_service is None:
-            self._pipeline_preview_service = build_pipeline(
-                file_service=self.file_service(),
-                ocr_service=self.ocr_service(),
+    def ingestion_preview_use_case(self) -> IngestionUseCase:
+        if self._ingestion_preview_use_case is None:
+            self._ingestion_preview_use_case = build_ingestion_use_case(
+                build_pipeline(
+                    file_service=self.file_service(),
+                    ocr_service=self.ocr_service(),
+                )
             )
-        return self._pipeline_preview_service
+        return self._ingestion_preview_use_case
 
-    def policy_pipeline_ingest_service(self) -> PolicyPipelineService:
-        if self._pipeline_ingest_service is None:
-            self._pipeline_ingest_service = build_pipeline(
-                repository=self.knowledge_write_repository(),
-                embedding_service=self.embedding_service(),
-                file_service=self.file_service(),
-                ocr_service=self.ocr_service(),
+    def ingestion_use_case(self) -> IngestionUseCase:
+        if self._ingestion_use_case is None:
+            self._ingestion_use_case = build_ingestion_use_case(
+                build_pipeline(
+                    write_capability=self.knowledge_write_capability(),
+                    embedding_service=self.embedding_service(),
+                    file_service=self.file_service(),
+                    ocr_service=self.ocr_service(),
+                )
             )
-        return self._pipeline_ingest_service
+        return self._ingestion_use_case
 
     def policy_upload_service(self) -> PolicyUploadService:
         if self._policy_upload_service is None:
@@ -234,6 +261,13 @@ class ApplicationContainer:
         if self._policy_ingestion_service is None:
             self._policy_ingestion_service = build_ingestion_service()
         return self._policy_ingestion_service
+
+    def policy_candidate_scan_use_case(self) -> PolicyCandidateScanUseCase:
+        if self._policy_candidate_scan_use_case is None:
+            self._policy_candidate_scan_use_case = (
+                build_policy_candidate_scan_use_case(self.policy_ingestion_service())
+            )
+        return self._policy_candidate_scan_use_case
 
     def knowledge_base_service(self) -> KnowledgeBaseService:
         if self._knowledge_base_service is None:

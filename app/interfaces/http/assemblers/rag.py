@@ -91,6 +91,7 @@ def ask_response(result: AnswerResult) -> RagAskResponse:
     )
 
 
+# 内部命中对象字段统一，避免在组装器中重复声明协议类型。
 def _hit_response(hit) -> RetrievalHit:  # noqa: ANN001
     return RetrievalHit(
         document_id=hit.document_id,

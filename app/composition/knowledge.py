@@ -1,3 +1,5 @@
+"""知识能力模块的 Composition Root，负责组装端口、仓储和检索策略。"""
+
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
@@ -17,6 +19,7 @@ from app.infrastructure.persistence.repositories.policy_persistence_gateway impo
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability
+from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 from app.modules.knowledge.retrieval.contracts import QueryEmbeddingService
 
 
@@ -34,6 +37,12 @@ def build_read_repository(
 
 def build_write_repository(gateway: PolicyPersistenceGateway) -> KnowledgeWriteRepository:
     return KnowledgeWriteRepository(gateway)
+
+
+def build_write_capability(
+    write_repository: KnowledgeWriteRepository,
+) -> KnowledgeBaseWriteCapability:
+    return KnowledgeBaseWriteCapability(write_repository)
 
 
 def build_query_capability(

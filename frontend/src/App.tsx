@@ -80,7 +80,7 @@ export default function App() {
         setErrorMessage(STALE_TARGET_DOCUMENT_MESSAGE);
       }
     } catch {
-      // Keep the current upload flow usable even if the options list fails to load.
+      // 即使制度选项加载失败，也要保证当前上传流程仍然可以继续使用。
     }
   }
 

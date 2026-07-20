@@ -20,7 +20,7 @@ from app.modules.ingestion.pipeline.steps.policy_section_splitter import PolicyS
 from app.modules.ingestion.pipeline.steps.policy_text_assembler import PolicyTextAssemblerService
 from app.modules.ingestion.pipeline.steps.policy_text_cleaner import PolicyTextCleaner
 from app.modules.ingestion.ports import ChunkEmbeddingPort, FileRegistrationPort, OcrPort
-from app.modules.knowledge.ports.write_port import KnowledgeWritePort
+from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 from app.shared.config import settings
 from app.shared.logging import get_logger
 
@@ -32,17 +32,19 @@ class PolicyPipelineService:
 
     def __init__(
         self,
-        repository: KnowledgeWritePort | None = None,
+        write_capability: KnowledgeBaseWriteCapability | None = None,
         *,
         embedding_service: ChunkEmbeddingPort | None = None,
         file_service: FileRegistrationPort,
         ocr_service: OcrPort,
     ) -> None:
         workspace_root = Path(settings.policy_pipeline_workspace)
-        self.repository = repository
+        self.write_capability = write_capability
         self.embedding_service = embedding_service
         self.persistence_service = (
-            PolicyPersistenceService(repository) if repository is not None else None
+            PolicyPersistenceService(write_capability)
+            if write_capability is not None
+            else None
         )
         self.file_service = file_service
         self.normalizer = PolicyFormatNormalizer(workspace_root=workspace_root)
@@ -58,8 +60,8 @@ class PolicyPipelineService:
         return self._run(request=request, mode="preview", persist=False)
 
     def ingest(self, request: PolicyPipelineRequest) -> PolicyPipelineResponse:
-        if self.repository is None:
-            raise RuntimeError("入库模式必须提供仓储实例。")
+        if self.write_capability is None:
+            raise RuntimeError("入库模式必须提供知识库写入能力。")
         return self._run(request=request, mode="ingest", persist=True)
 
     def _run(
@@ -79,6 +81,8 @@ class PolicyPipelineService:
             request.policy_category,
         )
 
+        # 阶段顺序是入库链路的核心约束：后续阶段只能消费前一阶段的结果，
+        # 预览或准入失败时通过 stop_requested 提前结束，不进入持久化。
         stages = (
             self._register_file,
             self._validate_intake,
