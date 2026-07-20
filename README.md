@@ -1,329 +1,404 @@
-# Bid Document Agent
-
-这是一个围绕招投标与企业资料知识库场景构建的 AI 工程化个人项目。
-
-对我来说，它不只是一个功能型 Demo，更像是我过去一年多学习和实践 AI 工程化的一次阶段性表达：我希望把自己对 RAG、LLM、工作流编排、后端服务、前端管理界面，以及“如何把 AI 真正放进业务流程里”的理解，落成一个持续演进、可以展示、也可以继续做深的项目。
-
-## 我为什么做这个项目
-
-过去一年多里，我持续关注并动手实践了这些方向：
-
-- 大模型应用
-- 提示词工程
-- RAG 与知识检索
-- 文档理解与信息抽取
-- 自动化工作流
-- 面向真实业务场景的 AI 工具落地
-
-相比“单次调用模型就结束”的演示，我更关心的是：
-
-- 数据怎么进入系统
-- 知识怎么被结构化和检索
-- 问答结果怎么回溯到原文
-- 系统怎么被维护，而不是只靠脚本一次性跑完
-- 一个 AI 项目怎么逐步长成真正可用的产品雏形
-
-`Bid Document Agent` 就是在这样的思路下开始的。
-
 ## 项目定位
 
-`bid-document-agent` 旨在对我曾经做过的业务, 围绕这些可挖掘的知识点, 业务点作为一个系统的回顾和展示，当前核心定位是：
+Bid Document Agent 当前围绕三类核心能力建设：
 
-- 用 RAG 建立可维护的企业知识库
-- 用 LLM 进行基于知识库的问答与辅助生成
-- 用后端服务把知识库、检索、问答能力产品化
-- 用前端管理界面把“数据维护”和“效果验证”可视化
+1. 知识文档入库
+2. 基于知识库的检索与问答
+3. 面向业务场景的规则判断 PoC
 
-当前整体技术构成定位为：
+项目不把 LLM 作为唯一核心，而是优先建设：
 
-- RAG
-- LLM
-- LangGraph / LangChain
-- FastAPI
-- React
-- PostgreSQL + pgvector
+```text
+文档进入
+  -> 解析与清洗
+  -> 章节与切块
+  -> 向量化与持久化
+  -> 检索与证据定位
+  -> 规则与业务数据处理
+  -> 可解释结果输出
+```
 
-## 当前阶段
+## 当前状态
 
-当前项目的第一阶段，不是追求一个“大而全”的 AI 系统，而是先把 **RAG 的最小闭环** 做扎实。
+| 阶段 | 状态 |
+|---|---|
+| Agent Phase 1：Retrieval-grounded MVP | 已完成 |
+| Milestone A：检索底座增强 | 已完成 |
+| Milestone B：混合检索与 rerank | 已完成 |
+| Milestone C：HNSW 与性能准备 | 已完成 |
+| Milestone D / D1：规则场景 PoC | 已完成 |
+| Milestone D / D2：规则获取抽象 | 已完成 |
+| Milestone D / D3：数据获取抽象 | 已完成 |
+| Milestone D / D4：结果生成链路 | 下一步 |
 
-我当前选择的首批知识库样板是两类资料：
+当前项目处于：
 
-- `公司制度`
-- `绩效标准`
+> Agent Phase 2 / Milestone D：规则获取 + 数据获取 + 结果生成 PoC
 
-这样选择的原因很直接：
+当前重点仍是单场景、可解释、可验证的业务闭环，不追求一次性构建完整多场景 Agent。
 
-- `公司制度` 适合做章节化、条款化、可引用的制度型知识库
-- `绩效标准` 适合做第二种资料样板，用来验证不同类型资料也能接入同一套 RAG 流程
-- 这两类资料都足够有业务代表性，适合作为 MVP 展示
+## 核心能力
 
-这里强调一下：当前阶段用到的样板资料只是用于搭建和展示流程，不代表未来知识库范围就只停留在这两类。
+### 文档入库
 
-## 当前阶段目标
+支持文档从接入到知识库写入的完整流程：
 
-第一阶段目标可以概括为一句话：
-
-**先做出一个“可入库、可检索、可问答、可维护、可验证”的 RAG MVP。**
-
-这个 MVP 重点不是“模型聊得多聪明”，而是把以下链路打通：
-
-1. 文档进入知识库
-2. 文本被解析、清洗、切分
-3. 索引和向量建立完成
-4. 前端可以维护和查看知识库内容
-5. 用户可以基于知识库进行问答
-6. 答案可以回溯到命中的原文片段
-7. 最后对召回效果进行测试和验证
-
-## MVP 范围
-
-当前最小 MVP 的范围是：
-
-### 1. 知识库入库
-
-支持将样板资料接入知识库，至少完成：
-
-- 文档登记
-- 版本记录
-- 文本抽取
+- 文件登记与准入校验
+- DOC / DOCX / PDF / 图片处理
+- 文档解析与 OCR
+- 文本清洗
 - 章节拆分
-- chunk 切分
-- embedding 写入
+- Chunk 切分
+- Embedding 生成
+- 文档、版本、章节、切块持久化
+- 预览与正式入库分离
 
-### 2. 检索能力
+### 知识检索
 
-支持基于用户问题进行检索，并能看到：
+当前检索链路由知识模块统一负责：
 
-- 命中的文档
-- 命中的章节或片段
-- 相对相关的召回结果
+- 向量召回
+- 关键词召回
+- 双路结果融合
+- 结果去重
+- 启发式 rerank
+- 最低分过滤
+- 召回来源追踪
+- 阶段调试信息输出
+- Exact / HNSW 向量策略切换
 
-### 3. LLM 问答
+### RAG 问答
 
-支持基于检索结果进行问答，并尽量提供：
+在线应用层提供统一的 RAG 外观：
 
-- 回答内容
-- 引用出处
-- 对应原文片段
+- `search`：只执行知识检索
+- `ask`：先检索，再基于命中证据生成回答
+- 返回引用文档、版本、章节、页码和原文片段
+- 无有效证据时拒绝生成无依据结论
 
-### 4. 前端维护
+### 业务规则判断
 
-支持一个最小知识库管理界面，用来展示和维护：
+当前已完成一个规则驱动的业务 PoC：
 
-- 已入库文档列表
-- 文档状态
-- 文档详情
-- 检索测试
-- 问答测试
+> 委托评估机构申请材料核验
 
-### 5. 效果验证
+该链路包含：
 
-在 MVP 跑通后，对召回效果做基础测试，例如：
+- 规则获取
+- 材料数据获取
+- 领域规则匹配
+- 缺失材料识别
+- 引用证据输出
+- `pass / fail / insufficient_evidence` 结构化结果
+- 调试信息和来源追踪
 
-- 预设问题集
-- 命中率观察
-- 召回片段是否相关
-- 是否能支持答案回溯
+### Agent 接入边界
 
-## 我对这个项目的工程化理解
+项目已经预留 LangChain / LangGraph 的 Function Calling 接入边界：
 
-这不是一个“先接个模型 API，再包一层页面”的项目。
+```text
+LangChain / LangGraph
+  -> Function Calling Adapter
+  -> AskKnowledgeUseCase
+  -> RAG Application Facade
+  -> Knowledge Query Capability
+```
 
-我更希望它体现出我对 AI 工程化的一些真实理解：
+当前阶段只提供稳定的能力接口，不提前引入复杂 Agent 编排。
 
-### 1. RAG 的核心不只是向量化
+## 目标架构
 
-真正重要的是：
+```mermaid
+flowchart LR
+    subgraph Interfaces["外部接口层"]
+        HTTP["HTTP API"]
+        HTTPAdapter["HTTP Assemblers"]
+        Agent["LangChain / LangGraph"]
+        ToolAdapter["Function Calling Adapter"]
+    end
 
-- 数据怎么进来
-- 结构怎么定义
-- chunk 怎么切
-- 元数据怎么保留
-- 命中后怎么回溯
-- 效果怎么验证
+    subgraph Applications["应用模块层"]
+        Online["Online Application<br/>RAG / Decision"]
+        Ingestion["Ingestion Application<br/>文档入库"]
+    end
 
-### 2. 知识库不是一次性脚本
+    subgraph Knowledge["知识能力层"]
+        Query["Query Capability<br/>查询 / 检索 / 引用"]
+        Write["Write Capability<br/>知识写入"]
+        Publish["Publication Service<br/>版本发布"]
+    end
 
-知识库后面一定需要维护，所以前端管理能力不是锦上添花，而是产品化的必要部分。
+    subgraph Infrastructure["持久化与基础设施层"]
+        Ports["Ports"]
+        Repositories["Repositories"]
+        Providers["LLM / Embedding / OCR / File System"]
+        Storage[("PostgreSQL / pgvector")]
+    end
 
-### 3. LLM 不是替代检索，而是建立在检索之上
+    Composition["Composition Root<br/>ApplicationContainer"]
 
-先把底层知识库和召回做好，再谈工作流编排、多步推理、复杂 Agent，才更稳。
+    HTTP --> HTTPAdapter
+    Agent --> ToolAdapter
+    HTTPAdapter --> Online
+    HTTPAdapter --> Ingestion
+    ToolAdapter --> Online
 
-### 4. 评估必须前置
+    Online --> Query
+    Ingestion --> Write
+    Ingestion --> Publish
 
-如果没有召回测试、问题集和基本验证机制，那 RAG 很容易停留在“看起来能跑”，而不是“真的可用”。
+    Query --> Ports
+    Write --> Ports
+    Publish --> Ports
+    Ports -.实现.-> Repositories
+    Repositories --> Storage
 
-## 当前知识库设计方向
+    Composition -.组装.-> Online
+    Composition -.组装.-> Ingestion
+    Composition -.组装.-> Repositories
+    Composition -.组装.-> Providers
+```
 
-当前仓库里的知识库表结构，第一阶段重点服务于制度类知识库，也就是：
+完整架构说明见 `ARCHITECTURE.md`。
 
-- 一项制度对应一条主档
-- 一个具体制度文件对应一个版本
-- 版本下可以拆章节
-- 章节下再切 chunk
+## 物理结构
 
-当前相关 SQL 设计见：
+```text
+app/
+├── modules/
+│   ├── online/              # 在线 RAG 与业务决策
+│   ├── knowledge/           # 知识查询、写入与发布能力
+│   └── ingestion/           # 独立文档入库能力
+├── interfaces/
+│   ├── http/                # HTTP 路由、Schema、Assembler
+│   └── agent/               # Function Calling Adapter
+├── infrastructure/
+│   ├── persistence/         # ORM、Session、Repository
+│   ├── llm/                 # LLM 与 Embedding 适配器
+│   ├── ocr/                 # OCR 适配器
+│   └── filesystem/          # 文件系统与上传暂存
+├── composition/             # Composition Root
+└── shared/                  # 配置、日志、异常与共享基础类型
 
-- [sql/001_kb_policy_schema.sql](D:/workspace/bid-document-agent/sql/001_kb_policy_schema.sql)
-- [sql/README-policy-schema.md](D:/workspace/bid-document-agent/sql/README-policy-schema.md)
+tests/
+├── architecture/           # 架构边界与包结构测试
+├── application/            # 应用层、规则和数据获取测试
+├── ingestion/              # 文档入库、OCR、上传测试
+├── knowledge/              # 检索、评测与 fixtures
+├── infrastructure/         # 数据库和外部适配器测试
+└── support/                # 公共测试工具
+```
 
-## 项目路线图
+## 架构原则
 
-### 阶段一：RAG MVP
+### 应用模块与知识能力分离
 
-目标：
+在线应用不直接访问数据库、向量索引或具体检索策略，只依赖知识查询能力。
 
-- 用 `公司制度` 和 `收费标准` 做样板知识库
-- 打通入库、检索、问答、维护、验证闭环
+入库应用不直接依赖具体 Repository，只通过知识写入能力完成持久化。
 
-产出：
+### HTTP Schema 与内部契约分离
 
-- 可运行的知识库后端
-- 可查看的前端管理界面
-- 可验证的问答与召回流程
+HTTP 请求和响应模型只存在于接口层。
 
-### 阶段二：知识库能力增强
+Assembler 负责：
 
-目标：
+- HTTP Schema 转内部 Command
+- 内部 Result 转 HTTP Response
+- 防止应用层反向依赖 FastAPI 或前端结构
 
-- 优化 chunk 策略
-- 优化检索效果
-- 完善元数据过滤
-- 增强问答引用能力
+### 仓储通过 Ports 抽象
 
-产出：
+知识模块定义读取、写入和发布端口。
 
-- 更稳定的召回质量
-- 更可控的答案生成效果
+基础设施层实现这些端口，具体数据库、ORM 和 pgvector 细节不会泄漏到领域层和应用层。
 
-### 阶段三：流程与智能体扩展
+### Composition Root 统一组装
 
-目标：
+所有具体适配器在 `ApplicationContainer` 中组装：
 
-- 在稳定 RAG 基础上引入 LangGraph / LangChain 流程编排
-- 扩展到更多业务任务，例如摘要、比对、辅助生成
+- Repository
+- LLM Client
+- Embedding Client
+- OCR Service
+- File Service
+- Application Use Case
 
-产出：
+### 个人项目也遵守工程边界
 
-- 从单一知识问答逐步演进到更完整的业务型 AI 助手
+个人项目不代表可以忽略工程质量。
+
+当前项目重点保持：
+
+- 模块职责清晰
+- 输入输出可验证
+- 关键链路可测试
+- 结果来源可追踪
+- 敏感数据不进入测试目录
+- 外部依赖可替换
+- 架构变更可持续演进
 
 ## 本地运行
 
-安装依赖后，可使用如下方式启动：
+### 环境要求
+
+- Python 3.11+
+- Node.js / npm
+- Docker Desktop
+- PostgreSQL + pgvector
+
+### 安装后端依赖
+
+```bash
+python -m venv .venv
+pip install -r requirements-dev.txt
+```
+
+Windows PowerShell：
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+### 配置环境变量
+
+```powershell
+Copy-Item .env.example .env
+```
+
+至少需要根据实际环境配置：
+
+- `DATABASE_URL` 或 PostgreSQL 分项配置
+- `GITEE_API_KEY`
+- `ZHIPU_API_KEY`
+- 腾讯 OCR 相关配置
+
+敏感配置只允许保存在 `.env`，禁止提交到 Git。
+
+### 启动 PostgreSQL
+
+```bash
+docker compose --env-file .env -f docker/postgres/docker-compose.yml up -d
+```
+
+### 启动后端
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-启动后访问：
+后端地址：
 
-- `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/hello/User`
+- `http://127.0.0.1:8000`
+- `http://127.0.0.1:8000/docs`
 
-## Python 依赖安装
-
-考虑到这是个人项目，当前只保留两份依赖文件：
-
-- `requirements-prod.txt`
-  - 面向部署和正式运行
-- `requirements-dev.txt`
-  - 面向本地开发，直接保留全量依赖，并带注释说明
-
-安装生产环境依赖：
+### 启动前端
 
 ```bash
-pip install -r requirements-prod.txt
+cd frontend
+npm install
+npm run dev
 ```
 
-安装本地开发全量依赖：
+## HTTP API
+
+当前主要接口：
+
+| 能力 | 方法 | 路径 |
+|---|---|---|
+| 检索 | POST | `/api/v1/kb/retrieval/search` |
+| RAG 问答 | POST | `/api/v1/kb/retrieval/ask` |
+| 业务规则判断 | POST | `/api/v1/kb/policy-decisions/court-evaluation-materials/review` |
+| 文档扫描 | POST | `/api/v1/kb/policy-ingestion/scan` |
+| 入库预览 | POST | `/api/v1/kb/policy-pipeline/preview` |
+| 文件上传预览 | POST | `/api/v1/kb/policy-pipeline/preview-upload` |
+| 文档入库 | POST | `/api/v1/kb/policy-pipeline/ingest` |
+| 暂存文件入库 | POST | `/api/v1/kb/policy-pipeline/ingest-upload` |
+| 知识版本发布 | POST | `/api/v1/kb/publication/activate` |
+
+## 测试与质量检查
+
+运行全部后端测试：
 
 ```bash
-pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-说明：
-
-- `dev` 环境已经包含当前阶段大部分需要的 Python 依赖
-- 包括 FastAPI、数据库、pgvector、文档解析、Gitee AI、LangChain、LangGraph、OCR、测试和代码检查
-- React 前端依赖后续单独放在前端工程中管理，不混在 Python 的 `pip` 文件中
-
-## 本地基础设施
-
-当前推荐使用 Docker 启动本地 PostgreSQL，而不是直接在 Windows 里手动安装数据库。这样更适合作为个人展示项目的可复现开发环境。
-
-### 1. 安装 Docker Desktop
-
-先在 Windows 上安装 Docker Desktop，并确保它可以正常启动。
-
-安装完成后，可以在终端里确认：
+运行代码检查：
 
 ```bash
-docker --version
-docker compose version
+ruff check app tests
+python -m compileall -q app tests
 ```
 
-### 2. 准备环境变量
-
-复制一份环境变量模板：
+构建前端：
 
 ```bash
-copy .env.example .env
+cd frontend
+npm run build
 ```
 
-如果你不是在 Windows CMD 里执行，也可以手动新建 `.env`，内容参考 `.env.example`。
+当前测试覆盖：
 
-默认配置：
+- 架构依赖边界
+- Composition Root 组装
+- 入库流水线
+- OCR 与文件解析
+- 上传暂存安全
+- 知识检索
+- 融合与 rerank
+- Exact / HNSW 策略
+- 数据库 Repository
+- 规则获取与业务决策
+- RAG 外观层
+- Embedding 适配器
 
-- `POSTGRES_DB=bid_document_agent`
-- `POSTGRES_USER=admin`
-- `POSTGRES_PASSWORD=123456`
-- `POSTGRES_PORT=5432`
+## 数据与安全边界
 
-### 3. 启动 PostgreSQL + pgvector
+- 训练数据、业务敏感文档和 OCR 输出不进入 `tests/`
+- 运行时文件写入 `.runtime/`
+- 上传暂存具备大小限制、ID 校验、路径隔离和过期清理
+- `.env` 不提交到 Git
+- 测试优先使用匿名样例、内存数据和 mock
+- 真实外部服务只通过基础设施适配器接入
 
-项目已经提供 PostgreSQL 的 Compose 文件，建议在仓库根目录显式指定 `.env` 和 Compose 文件路径：
+## 项目路线
 
-```bash
-docker compose --env-file .env -f docker\postgres\docker-compose.yml up -d
-```
+### 已完成
 
-第一次启动时会自动：
+- RAG 最小闭环
+- 文档入库链路
+- 混合检索与 rerank
+- HNSW 策略准备
+- Online / Knowledge / Ingestion 架构拆分
+- Repository 与 Ports 抽象
+- Milestone D 的 D1、D2、D3 首版能力
 
-- 拉取 `pgvector/pgvector:pg17` 镜像
-- 创建 PostgreSQL 容器
-- 执行初始化脚本
-- 启用 `vector` 和 `unaccent` 扩展
+### 当前推进
 
-### 4. 验证数据库是否可用
+- Milestone D / D4：结果生成链路通用化
+- 继续完善单场景 PoC 的验收与回归资产
+- 保持规则、数据和结果之间的可解释性
 
-查看容器状态：
+### 后续规划
 
-```bash
-docker compose --env-file .env -f docker\postgres\docker-compose.yml ps
-```
+- 扩展第二类业务规则场景
+- 接入真实业务数据 Provider
+- 引入 LangChain / LangGraph 编排
+- 支持更多 Agent 工具调用能力
+- 扩展历史案例、模板和文档生成能力
 
-查看日志：
+## 相关文档
 
-```bash
-docker compose --env-file .env -f docker\postgres\docker-compose.yml logs postgres
-```
+- `ARCHITECTURE.md`：当前架构基准
+- `agent.md`：协作与工程开发约定
+- `docs/当前阶段与下一阶段计划.md`：整体阶段规划
+- `docs/第二阶段-MilestoneD工作计划.md`：当前 Milestone D 工作计划
+- `sql/README-policy-schema.md`：知识库表结构设计
+- `tools/ocr/README.md`：OCR 与样本分类工具说明
 
-进入数据库：
+## 项目声明
 
-```bash
-docker compose --env-file .env -f docker\postgres\docker-compose.yml exec postgres psql -U admin -d bid_document_agent
-```
+这是一个个人学习与工程实践项目。
 
-进入后可执行：
-
-```sql
-\dx
-```
-
-如果能看到 `vector` 和 `unaccent` 扩展，就说明初始化已经成功。
-
-## 状态说明
-
-项目仍在持续开发中，当前版本主要用于搭建第一阶段的 RAG MVP。后续会随着知识库能力、前端界面和评估体系的完善不断更新。
+项目会持续通过真实问题、架构演进、测试验证和阶段性复盘进行完善。当前实现以可验证 PoC 和工程结构建设为主，不代表已经达到生产环境完整可用标准。

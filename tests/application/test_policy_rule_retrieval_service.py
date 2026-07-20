@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.modules.online.domain.checklist import CHECKLIST_SCENARIO_REGISTRY
 from app.interfaces.http.schemas import (
     RetrievalDebugInfo,
     RetrievalFilters,
@@ -8,17 +7,24 @@ from app.interfaces.http.schemas import (
     RetrievalSearchResponse,
     RetrievalStageDebug,
 )
-from app.modules.online.application.rule_retrieval import PolicyRuleRetrievalService, RuleRetrievalRequest
+from app.modules.online.application.rule_retrieval import (
+    PolicyRuleRetrievalService,
+    RuleRetrievalRequest,
+)
+from app.modules.online.domain.checklist import CHECKLIST_SCENARIO_REGISTRY
 
-RULE_CHUNK_TEXT = """第十条 评估、拍卖机构自愿参与人民法院委托工作的，应在指定时间到人民法院申请登记，提交相关资料。申请参与委托评估（审计）的机构应提交如下审验资料：
-(1)申请书、登记表及机构简介；
-(2)经年检合格的企业法人营业执照副本和税务登记证副本；
-(3)经年检合格的机构资质、资格证书副本；
-(4)机构评估（审计）人员名单及其相关资质、机构营业场所证明资料；
-(5)资格证书副本；
-(6)注资证明及资产明细表；
-(7)税务机关出具的纳税证明；
-(8)法院指定提交的其他资料。"""
+RULE_CHUNK_TEXT = (
+    "第十条 评估、拍卖机构自愿参与人民法院委托工作的，应在指定时间到人民法院申请登记，"
+    "提交相关资料。申请参与委托评估（审计）的机构应提交如下审验资料：\n"
+    "(1)申请书、登记表及机构简介；\n"
+    "(2)经年检合格的企业法人营业执照副本和税务登记证副本；\n"
+    "(3)经年检合格的机构资质、资格证书副本；\n"
+    "(4)机构评估（审计）人员名单及其相关资质、机构营业场所证明资料；\n"
+    "(5)资格证书副本；\n"
+    "(6)注资证明及资产明细表；\n"
+    "(7)税务机关出具的纳税证明；\n"
+    "(8)法院指定提交的其他资料。"
+)
 
 
 class FakeRetrievalService:

@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--eval-set",
-        default="tests/retrieval_eval_set_step_a.json",
+        default="tests/knowledge/fixtures/retrieval_eval_set_step_a.json",
         help="评测集文件路径，默认复用当前最小评测集。",
     )
     parser.add_argument(

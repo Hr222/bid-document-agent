@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
 from app.interfaces.http.schemas import RetrievalSearchRequest
 from app.modules.knowledge.retrieval import HybridRetrievalPipeline
+from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
 
 
 class StubEmbeddingService:
@@ -73,7 +73,10 @@ def _hit(
 
 def test_rerank_promotes_scope_clause_to_top1() -> None:
     # 模拟 HR-001 风格问题：第二条虽然原始融合分略低，但正文更直接回答“适用于哪些人”。
-    pipeline = HybridRetrievalPipeline(repository=object(), embedding_service=StubEmbeddingService())
+    pipeline = HybridRetrievalPipeline(
+        repository=object(),
+        embedding_service=StubEmbeddingService(),
+    )
     keyword_plan = pipeline.query_policy.build_keyword_plan("人事管理制度适用于哪些人")
     hits = [
         _hit(
@@ -107,7 +110,10 @@ def test_rerank_promotes_scope_clause_to_top1() -> None:
 
 def test_rerank_keeps_trial_period_clause_above_irrelevant_article() -> None:
     # 模拟 HR-002 风格问题：真正写明试用期时长的条款，应压过无关的制度尾部条款。
-    pipeline = HybridRetrievalPipeline(repository=object(), embedding_service=StubEmbeddingService())
+    pipeline = HybridRetrievalPipeline(
+        repository=object(),
+        embedding_service=StubEmbeddingService(),
+    )
     keyword_plan = pipeline.query_policy.build_keyword_plan("员工试用期多久")
     hits = [
         _hit(

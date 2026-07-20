@@ -4,8 +4,8 @@ from collections.abc import Generator
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.shared.config import settings
 from app.infrastructure.persistence.base import Base
+from app.shared.config import settings
 
 
 class SchemaHarness:

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 from click import echo
-from openai import APIConnectionError
-from openai import OpenAI
+from openai import APIConnectionError, OpenAI
 
 from app.shared.config import settings
 

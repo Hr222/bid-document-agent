@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from app.shared.config import settings
-from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
 from app.interfaces.http.schemas import RetrievalSearchRequest
 from app.modules.knowledge.retrieval import (
     ExactVectorSearchStrategy,
@@ -9,6 +7,8 @@ from app.modules.knowledge.retrieval import (
     HybridRetrievalPipeline,
     build_vector_search_strategy,
 )
+from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
+from app.shared.config import settings
 
 
 class StubEmbeddingService:

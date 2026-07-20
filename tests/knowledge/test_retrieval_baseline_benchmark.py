@@ -5,16 +5,16 @@ from pathlib import Path
 
 import pytest
 
+from app.modules.knowledge.retrieval.vector_search import VectorSearchStrategyName
 from app.scripts.run_retrieval_baseline import (
     BenchmarkCaseResult,
     EvalCaseDefinition,
     StrategyCaseResult,
-    build_eval_set_summary,
     build_comparison_summary,
-    load_eval_cases,
+    build_eval_set_summary,
     build_strategy_summary,
+    load_eval_cases,
 )
-from app.modules.knowledge.retrieval.vector_search import VectorSearchStrategyName
 
 
 def make_strategy_case_result(

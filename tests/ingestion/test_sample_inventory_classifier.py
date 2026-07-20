@@ -8,9 +8,8 @@ import fitz
 
 from app.modules.ingestion.pipeline.scan_service import PolicyIngestionService
 
-
 MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[2]
     / "tools"
     / "ocr"
     / "classify_sample_inventory.py"

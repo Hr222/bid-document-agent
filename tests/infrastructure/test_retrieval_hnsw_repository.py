@@ -4,12 +4,17 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from app.shared.config import settings
-from app.infrastructure.persistence.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
+from app.infrastructure.persistence.models import (
+    PolicyChunk,
+    PolicyDocument,
+    PolicySection,
+    PolicyVersion,
+)
 from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
     PolicyPersistenceGateway,
 )
-from tests.db_test_utils import SchemaHarness
+from app.shared.config import settings
+from tests.support.db_test_utils import SchemaHarness
 
 
 def _embedding(primary_index: int, magnitude: float = 1.0) -> list[float]:
@@ -19,7 +24,11 @@ def _embedding(primary_index: int, magnitude: float = 1.0) -> list[float]:
 
 
 def _apply_hnsw_index_script(harness: SchemaHarness) -> None:
-    script_path = Path(__file__).resolve().parents[1] / "sql" / "004_kb_policy_chunk_embedding_hnsw.sql"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "sql"
+        / "004_kb_policy_chunk_embedding_hnsw.sql"
+    )
     script = script_path.read_text(encoding="utf-8")
     with harness.test_engine.begin() as conn:
         conn.exec_driver_sql(script)
