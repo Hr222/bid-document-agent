@@ -27,7 +27,7 @@
 
 ### 2.1 Checklist 规则能力仍是“通用骨架 + 单场景硬编码规则包”
 
-当前 `app/domain/policy/checklist.py` 已经抽出了：
+当前 `app/modules/online/domain/checklist/definitions.py` 已经抽出了：
 
 - `ChecklistScenarioDefinition`
 - `ChecklistRequirementDefinition`

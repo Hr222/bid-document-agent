@@ -8,13 +8,16 @@ from app.modules.knowledge.retrieval.contracts import (
 )
 from app.modules.knowledge.retrieval.fusion import HybridHitFusionService
 from app.modules.knowledge.retrieval.models import RetrievalPipelineResult, RetrievalStageTrace
+from app.modules.knowledge.retrieval.policies import (
+    PolicyRetrievalQueryPolicy,
+    RetrievalKeywordPlan,
+)
 from app.modules.knowledge.retrieval.rerank import HeuristicRetrievalReranker
 from app.modules.knowledge.retrieval.vector_search import (
     VectorSearchRequest,
     VectorSearchStrategy,
     build_vector_search_strategy,
 )
-from app.modules.online.domain.policy import PolicyRetrievalQueryPolicy, RetrievalKeywordPlan
 from app.shared.config import settings
 
 

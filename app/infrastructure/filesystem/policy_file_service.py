@@ -5,7 +5,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from app.modules.ingestion.contracts import IntakeValidationResult, RegisteredFileInfo
-from app.modules.online.domain.policy import PolicyIntakePolicy
+from app.modules.ingestion.domain import PolicyIntakePolicy
 
 
 class PolicyFileService:

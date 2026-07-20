@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.interfaces.agent.contracts import AskKnowledgeToolArguments, FunctionCallingResult
 from app.modules.online.application.rag_facade import RagApplicationFacade
 from app.modules.online.contracts import AskKnowledgeCommand
 
@@ -10,7 +11,7 @@ class FunctionCallingAdapter:
     def __init__(self, facade: RagApplicationFacade) -> None:
         self.facade = facade
 
-    def ask_knowledge(self, arguments: dict[str, object]) -> dict[str, object]:
+    def ask_knowledge(self, arguments: AskKnowledgeToolArguments) -> FunctionCallingResult:
         command = AskKnowledgeCommand(
             query=str(arguments.get("query", "")),
             top_k=int(arguments.get("top_k", 5)),

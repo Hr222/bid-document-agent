@@ -4,12 +4,10 @@ from app.modules.ingestion.application.ingestion_use_case import IngestionUseCas
 from app.modules.ingestion.pipeline import (
     PolicyIngestionService,
     PolicyPipelineService,
-    PolicyUploadService,
 )
 
 __all__ = [
     "IngestionUseCase",
     "PolicyIngestionService",
     "PolicyPipelineService",
-    "PolicyUploadService",
 ]

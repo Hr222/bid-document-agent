@@ -1,5 +1,5 @@
 from app.composition import ApplicationContainer
-from app.modules.online.domain.policy import COURT_EVALUATION_MATERIALS_SCENARIO
+from app.modules.online.domain.checklist import COURT_EVALUATION_MATERIALS_SCENARIO
 
 
 def test_application_container_registers_current_scenario_provider() -> None:

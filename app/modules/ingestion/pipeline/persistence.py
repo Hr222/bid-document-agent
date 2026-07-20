@@ -65,20 +65,20 @@ class PolicyPersistenceService:
             "知识库记录写入完成 source_path=%s document_id=%s "
             "version_id=%s version_seq=%s sections=%s chunks=%s",
             context.request.source_path,
-            persisted.document.id,
-            persisted.version.id,
-            persisted.version.version_seq,
-            len(persisted.sections),
-            len(persisted.chunks),
+            persisted.document_id,
+            persisted.version_id,
+            persisted.version_seq,
+            persisted.section_count,
+            persisted.chunk_count,
         )
         return PersistenceResult(
             persisted=True,
-            document_id=persisted.document.id,
-            version_id=persisted.version.id,
-            version_seq=persisted.version.version_seq,
-            version_label=persisted.version.version_label,
-            section_count=len(persisted.sections),
-            chunk_count=len(persisted.chunks),
+            document_id=persisted.document_id,
+            version_id=persisted.version_id,
+            version_seq=persisted.version_seq,
+            version_label=persisted.version_label,
+            section_count=persisted.section_count,
+            chunk_count=persisted.chunk_count,
             message="已完成制度文档、版本、章节、切块和向量入库。",
         )
 

@@ -4,11 +4,11 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.composition import ApplicationContainer
+from app.infrastructure.filesystem.upload_service import PolicyUploadService
 from app.infrastructure.persistence.session import SessionLocal
 from app.modules.ingestion import (
     PolicyIngestionService,
     PolicyPipelineService,
-    PolicyUploadService,
 )
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService

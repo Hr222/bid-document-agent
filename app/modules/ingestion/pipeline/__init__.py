@@ -6,11 +6,8 @@
 
 from app.modules.ingestion.pipeline.pipeline import PolicyPipelineService
 from app.modules.ingestion.pipeline.scan_service import PolicyIngestionService
-from app.modules.ingestion.pipeline.upload_service import PolicyUploadService, StagedUpload
 
 __all__ = [
     "PolicyIngestionService",
     "PolicyPipelineService",
-    "PolicyUploadService",
-    "StagedUpload",
 ]

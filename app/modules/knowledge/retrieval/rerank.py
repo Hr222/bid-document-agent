@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
-from app.modules.online.domain.policy import PolicyRetrievalQueryPolicy, RetrievalKeywordPlan
+from app.modules.knowledge.retrieval.policies import (
+    PolicyRetrievalQueryPolicy,
+    RetrievalKeywordPlan,
+)
 
 
 class HeuristicRetrievalReranker:

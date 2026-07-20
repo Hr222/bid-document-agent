@@ -6,7 +6,9 @@ from sqlalchemy import text
 
 from app.shared.config import settings
 from app.infrastructure.persistence.models import PolicyChunk, PolicyDocument, PolicySection, PolicyVersion
-from app.infrastructure.persistence.repositories.policy_repository import PolicyRepository
+from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
+    PolicyPersistenceGateway,
+)
 from tests.db_test_utils import SchemaHarness
 
 
@@ -126,7 +128,7 @@ def test_repository_search_chunks_hnsw_returns_hits_and_sets_ef_search() -> None
 
         session = harness.session_local()
         try:
-            repository = PolicyRepository(session)
+            repository = PolicyPersistenceGateway(session)
             hits = repository.search_chunks_hnsw(
                 query_embedding=_embedding(0, 1.0),
                 top_k=2,

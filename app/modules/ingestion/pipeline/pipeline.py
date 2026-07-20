@@ -9,20 +9,18 @@ from app.modules.ingestion.contracts import (
     PolicyPipelineRequest,
     PolicyPipelineResponse,
 )
+from app.modules.ingestion.domain import PolicyIdentityPolicy
 from app.modules.ingestion.pipeline.context import PipelineContext, PipelineMode
 from app.modules.ingestion.pipeline.persistence import PolicyPersistenceService
 from app.modules.ingestion.pipeline.response_builder import PipelineResponseBuilder
 from app.modules.ingestion.pipeline.steps.policy_chunking import PolicyChunkingService
-from app.modules.ingestion.pipeline.steps.policy_file_service import PolicyFileService
 from app.modules.ingestion.pipeline.steps.policy_normalizer import PolicyFormatNormalizer
-from app.modules.ingestion.pipeline.steps.policy_ocr import PolicyOcrService
 from app.modules.ingestion.pipeline.steps.policy_parser import PolicyParserService
 from app.modules.ingestion.pipeline.steps.policy_section_splitter import PolicySectionSplitter
 from app.modules.ingestion.pipeline.steps.policy_text_assembler import PolicyTextAssemblerService
 from app.modules.ingestion.pipeline.steps.policy_text_cleaner import PolicyTextCleaner
-from app.modules.ingestion.ports import ChunkEmbeddingPort
+from app.modules.ingestion.ports import ChunkEmbeddingPort, FileRegistrationPort, OcrPort
 from app.modules.knowledge.ports.write_port import KnowledgeWritePort
-from app.modules.online.domain.policy import PolicyIdentityPolicy
 from app.shared.config import settings
 from app.shared.logging import get_logger
 
@@ -37,6 +35,8 @@ class PolicyPipelineService:
         repository: KnowledgeWritePort | None = None,
         *,
         embedding_service: ChunkEmbeddingPort | None = None,
+        file_service: FileRegistrationPort,
+        ocr_service: OcrPort,
     ) -> None:
         workspace_root = Path(settings.policy_pipeline_workspace)
         self.repository = repository
@@ -44,10 +44,10 @@ class PolicyPipelineService:
         self.persistence_service = (
             PolicyPersistenceService(repository) if repository is not None else None
         )
-        self.file_service = PolicyFileService()
+        self.file_service = file_service
         self.normalizer = PolicyFormatNormalizer(workspace_root=workspace_root)
         self.parser = PolicyParserService()
-        self.ocr_service = PolicyOcrService()
+        self.ocr_service = ocr_service
         self.text_assembler = PolicyTextAssemblerService()
         self.cleaner = PolicyTextCleaner()
         self.section_splitter = PolicySectionSplitter()

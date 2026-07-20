@@ -9,7 +9,9 @@ from pathlib import Path
 from time import perf_counter
 
 from app.infrastructure.llm.embedding_client import GiteeEmbeddingClient
-from app.infrastructure.persistence.repositories.policy_repository import PolicyRepository
+from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
+    PolicyPersistenceGateway,
+)
 from app.infrastructure.persistence.session import SessionLocal
 from app.modules.knowledge.ports.read_port import KnowledgeQuery, KnowledgeQueryTrace
 from app.modules.knowledge.retrieval import HybridRetrievalPipeline, KnowledgeRetrievalService
@@ -177,7 +179,7 @@ def build_retrieval_service(
     """为指定策略构造独立的检索服务，避免策略之间互相污染。"""
 
     session = SessionLocal()
-    repository = PolicyRepository(session)
+    repository = PolicyPersistenceGateway(session)
     pipeline = HybridRetrievalPipeline(
         repository=repository,
         embedding_service=GiteeEmbeddingClient(),

@@ -6,7 +6,7 @@ from app.modules.ingestion.contracts import (
     ChunkSplitResult,
     SectionSplitResult,
 )
-from app.modules.online.domain.policy import PolicyChunkingPolicy
+from app.modules.ingestion.domain import PolicyChunkingPolicy
 from app.shared.config import settings
 
 

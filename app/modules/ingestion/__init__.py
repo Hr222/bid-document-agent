@@ -3,7 +3,6 @@
 from app.modules.ingestion.pipeline import (
     PolicyIngestionService,
     PolicyPipelineService,
-    PolicyUploadService,
 )
 
-__all__ = ["PolicyIngestionService", "PolicyPipelineService", "PolicyUploadService"]
+__all__ = ["PolicyIngestionService", "PolicyPipelineService"]

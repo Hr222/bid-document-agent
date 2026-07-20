@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from app.modules.knowledge.ports.read_port import KnowledgeQueryTrace
 from app.modules.online.contracts import AnswerCitationResult
 
 
@@ -46,6 +45,17 @@ class DataAcquisitionDebugResult:
 
 
 @dataclass(slots=True, frozen=True)
+class DecisionRetrievalTrace:
+    """在线决策使用的检索过程摘要，不暴露知识模块 DTO。"""
+
+    name: str
+    source: str | None = None
+    input_count: int | None = None
+    output_count: int | None = None
+    details: dict[str, str | int | float | bool | None] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
 class DecisionDebugResult:
     retrieval_query: str
     policy_category: str | None
@@ -57,7 +67,7 @@ class DecisionDebugResult:
     retrieval_pipeline: str
     retrieval_strategy: str
     retrieval_min_score: float
-    retrieval: tuple[KnowledgeQueryTrace, ...] = field(default_factory=tuple)
+    retrieval: tuple[DecisionRetrievalTrace, ...] = field(default_factory=tuple)
 
 
 @dataclass(slots=True, frozen=True)

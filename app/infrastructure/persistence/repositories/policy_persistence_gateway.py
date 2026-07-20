@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.modules.ingestion.contracts import (
     RegisteredFileInfo,
     SectionSplitItem,
 )
+from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
 from app.shared.config import settings
 
 
@@ -34,30 +35,6 @@ class PersistedPolicyRecords:
 
 
 @dataclass(slots=True)
-class RetrievedPolicyChunk:
-    """检索命中结果的最小仓储对象，保留来源与分数拆解供上层融合。"""
-
-    document_id: int
-    version_id: int
-    chunk_id: int
-    policy_name: str
-    policy_category: str
-    responsible_department: str | None
-    version_label: str
-    section_title: str | None
-    section_path: str | None
-    page_no: int | None
-    chunk_text: str
-    score: float
-    # 标记命中来自向量、关键词，或后续融合后的 hybrid。
-    retrieval_source: str = "vector"
-    # 保留各路分数，便于后续 debug 和结果解释。
-    score_breakdown: dict[str, float] = field(default_factory=dict)
-    # 额外保留调试细节，供 pipeline 汇总到 debug 阶段信息中。
-    debug_details: dict[str, str | int | float | bool | None] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
 class PolicyDocumentListItem:
     document_id: int
     policy_name: str
@@ -67,8 +44,11 @@ class PolicyDocumentListItem:
     latest_version_label: str | None
 
 
-class PolicyRepository:
-    """制度知识库落库仓储。"""
+class PolicyPersistenceGateway:
+    """PostgreSQL/pgvector 的内部持久化网关。
+
+    读写仓储分别组合本网关，对外只暴露各自的知识端口。
+    """
 
     def __init__(self, session: Session) -> None:
         self.session = session

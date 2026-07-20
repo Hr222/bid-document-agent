@@ -4,15 +4,25 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.infrastructure.persistence.models import PolicyDocument, PolicyVersion
+from app.modules.knowledge.domain import KnowledgePublicationState
+from app.modules.knowledge.ports.publication_port import (
+    KnowledgePublicationPort,
+    KnowledgePublicationRecord,
+)
 
 
-class KnowledgePublicationRepository:
+class KnowledgePublicationRepository(KnowledgePublicationPort):
     """基于版本状态和主档 current_version_id 实现知识发布。"""
 
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def activate_version(self, *, document_id: int, version_id: int) -> PolicyVersion:
+    def activate_version(
+        self,
+        *,
+        document_id: int,
+        version_id: int,
+    ) -> KnowledgePublicationRecord:
         version = self.session.scalar(
             select(PolicyVersion).where(
                 PolicyVersion.id == version_id,
@@ -30,12 +40,16 @@ class KnowledgePublicationRepository:
         if previous_version_id and previous_version_id != version_id:
             previous = self.session.get(PolicyVersion, previous_version_id)
             if previous is not None:
-                previous.version_status = "superseded"
+                previous.version_status = KnowledgePublicationState.SUPERSEDED.value
 
-        version.version_status = "active"
+        version.version_status = KnowledgePublicationState.ACTIVE.value
         document.current_version_id = version.id
         document.status = "active"
         self.session.add_all([document, version])
         self.session.commit()
         self.session.refresh(version)
-        return version
+        return KnowledgePublicationRecord(
+            document_id=document_id,
+            version_id=version.id,
+            version_status=version.version_status,
+        )

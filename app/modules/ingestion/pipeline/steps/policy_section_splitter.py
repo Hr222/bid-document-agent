@@ -6,7 +6,7 @@ from app.modules.ingestion.contracts import (
     SectionSplitItem,
     SectionSplitResult,
 )
-from app.modules.online.domain.policy import PolicySectionStructurePolicy
+from app.modules.ingestion.domain import PolicySectionStructurePolicy
 
 
 class PolicySectionSplitter:

@@ -48,13 +48,14 @@
 - 当前已新增一条独立的 D1 PoC 路由：
   - `POST /api/v1/kb/policy-decisions/court-evaluation-materials/review`
 - 当前 `ask` 已能基于命中结果生成最小可引用回答
-- 当前领域层已经开始沉淀规则代码入口，例如：
-  - `app/domain/policy/rules.py`
+- 当前领域层已经按职责拆分规则代码入口，例如：
+  - `app/modules/ingestion/domain/policies.py`
+  - `app/modules/knowledge/retrieval/policies.py`
 - 当前已经有一版最小规则驱动清单校验能力：
-  - `app/domain/policy/checklist.py`
+  - `app/modules/online/domain/checklist/definitions.py`
 - 当前已经有一版 PoC 级 decision service / schema：
-  - `app/services/policy_decision/service.py`
-  - `app/schemas/policy_decision.py`
+  - `app/modules/online/application/decision/service.py`
+  - `app/interfaces/http/schemas/policy_decision.py`
 - 当前检索链路已能输出较完整的 debug / trace 信息，具备继续做规则/数据链路可解释性的基础
 
 ### 3.2 当前剩余的工程问题
@@ -272,14 +273,14 @@
 如果现在继续往下推进，建议按这个顺序阅读：
 
 1. `docs/当前阶段与下一阶段计划.md`
-2. `app/services/retrieval/pipeline.py`
-3. `app/services/retrieval/service.py`
-4. `app/services/retrieval/answer_service.py`
-5. `app/domain/policy/rules.py`
-6. `app/domain/policy/checklist.py`
-7. `app/services/policy_decision/service.py`
-8. `app/api/routes/retrieval.py`
-9. `app/api/routes/policy_decision.py`
+2. `app/modules/knowledge/retrieval/pipeline.py`
+3. `app/modules/knowledge/retrieval/service.py`
+4. `app/infrastructure/llm/llm_client.py`
+5. `app/modules/knowledge/retrieval/policies.py`
+6. `app/modules/online/domain/checklist/definitions.py`
+7. `app/modules/online/application/decision/service.py`
+8. `app/interfaces/http/routes/retrieval.py`
+9. `app/interfaces/http/routes/policy_decision.py`
 
 这样看完之后，会很清楚：
 

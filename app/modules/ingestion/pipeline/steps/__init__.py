@@ -4,9 +4,7 @@
 """
 
 from app.modules.ingestion.pipeline.steps.policy_chunking import PolicyChunkingService
-from app.modules.ingestion.pipeline.steps.policy_file_service import PolicyFileService
 from app.modules.ingestion.pipeline.steps.policy_normalizer import PolicyFormatNormalizer
-from app.modules.ingestion.pipeline.steps.policy_ocr import PolicyOcrService
 from app.modules.ingestion.pipeline.steps.policy_parser import PolicyParserService
 from app.modules.ingestion.pipeline.steps.policy_section_splitter import PolicySectionSplitter
 from app.modules.ingestion.pipeline.steps.policy_text_assembler import PolicyTextAssemblerService
@@ -14,9 +12,7 @@ from app.modules.ingestion.pipeline.steps.policy_text_cleaner import PolicyTextC
 
 __all__ = [
     "PolicyChunkingService",
-    "PolicyFileService",
     "PolicyFormatNormalizer",
-    "PolicyOcrService",
     "PolicyParserService",
     "PolicySectionSplitter",
     "PolicyTextAssemblerService",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from app.infrastructure.persistence.repositories.policy_repository import PolicyRepository
+from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
+    PolicyPersistenceGateway,
+)
 from app.modules.knowledge.ports.read_port import (
     KnowledgeDocument,
     KnowledgeQuery,
@@ -19,13 +21,13 @@ class KnowledgeReadRepository(KnowledgeReadPort):
 
     def __init__(
         self,
-        repository: PolicyRepository,
+        gateway: PolicyPersistenceGateway,
         *,
         embedding_service: QueryEmbeddingService | None = None,
     ) -> None:
-        self.repository = repository
+        self.gateway = gateway
         self.retrieval_service = KnowledgeRetrievalService(
-            repository,
+            gateway,
             embedding_service=embedding_service,
         )
 
@@ -48,7 +50,7 @@ class KnowledgeReadRepository(KnowledgeReadPort):
                 latest_version_id=item.latest_version_id,
                 latest_version_label=item.latest_version_label,
             )
-            for item in self.repository.list_documents(
+            for item in self.gateway.list_documents(
                 search=search,
                 policy_category=policy_category,
                 limit=limit,

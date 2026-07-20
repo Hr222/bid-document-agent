@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from app.infrastructure.persistence.repositories.policy_repository import RetrievedPolicyChunk
+from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
 from app.interfaces.http.schemas import RetrievalSearchRequest
 from app.modules.knowledge.retrieval import HybridRetrievalPipeline
 

@@ -3,17 +3,18 @@ from __future__ import annotations
 from app.modules.knowledge.ports.read_port import KnowledgeQueryResult, KnowledgeQueryTrace
 from app.modules.online.application.data_acquisition.models import ChecklistDataPack
 from app.modules.online.contracts import AnswerCitationResult
+from app.modules.online.domain.checklist import (
+    ChecklistEvaluationResult,
+    ChecklistRulePack,
+    ChecklistScenarioDefinition,
+)
 from app.modules.online.domain.decision_result import (
     DataAcquisitionDebugResult,
     DataFieldTraceResult,
     DecisionDebugResult,
     DecisionResult,
+    DecisionRetrievalTrace,
     RequirementStatusResult,
-)
-from app.modules.online.domain.policy import (
-    ChecklistEvaluationResult,
-    ChecklistRulePack,
-    ChecklistScenarioDefinition,
 )
 from app.shared.config import settings
 
@@ -111,7 +112,16 @@ class PolicyDecisionResultBuilder:
             retrieval_pipeline=retrieval_pipeline,
             retrieval_strategy=retrieval_strategy,
             retrieval_min_score=retrieval_min_score,
-            retrieval=retrieval_debug,
+            retrieval=tuple(
+                DecisionRetrievalTrace(
+                    name=item.name,
+                    source=item.source,
+                    input_count=item.input_count,
+                    output_count=item.output_count,
+                    details=dict(item.details),
+                )
+                for item in retrieval_debug
+            ),
         )
 
     def build_response(

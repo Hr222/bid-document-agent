@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.modules.online.domain.policy import PolicyIntakePolicy
+from app.modules.ingestion.domain import PolicyIntakePolicy
 from app.interfaces.http.schemas.policy_ingestion import PolicyScanRequest
 from app.modules.ingestion.pipeline.scan_service import PolicyIngestionService
 from app.modules.ingestion.pipeline.steps.policy_parser import PolicyParserService

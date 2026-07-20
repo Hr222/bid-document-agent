@@ -13,6 +13,10 @@ from app.modules.knowledge.retrieval.pipeline import (
     ExactVectorRetrievalPipeline,
     HybridRetrievalPipeline,
 )
+from app.modules.knowledge.retrieval.policies import (
+    PolicyRetrievalQueryPolicy,
+    RetrievalKeywordPlan,
+)
 from app.modules.knowledge.retrieval.rerank import HeuristicRetrievalReranker
 from app.modules.knowledge.retrieval.service import KnowledgeRetrievalService
 from app.modules.knowledge.retrieval.vector_search import (
@@ -29,7 +33,9 @@ __all__ = [
     "HybridRetrievalPipeline",
     "HnswVectorSearchStrategy",
     "KnowledgeRetrievalService",
+    "PolicyRetrievalQueryPolicy",
     "RetrievalPipelineResult",
+    "RetrievalKeywordPlan",
     "RetrievalStageTrace",
     "build_vector_search_strategy",
 ]

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from app.modules.knowledge.ports.read_port import KnowledgeQueryTrace, KnowledgeSearchHit
 from app.modules.online.contracts import AnswerCitationResult
-from app.modules.online.domain.policy import ChecklistRulePack, ChecklistScenarioDefinition
+from app.modules.online.domain.checklist import ChecklistRulePack, ChecklistScenarioDefinition
 
 
 @dataclass(slots=True, frozen=True)

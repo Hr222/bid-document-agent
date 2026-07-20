@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.modules.online.domain.policy.checklist import (
+from app.modules.online.domain.checklist.definitions import (
     COURT_EVALUATION_MATERIALS_SCENARIO,
     ChecklistScenarioDefinition,
 )

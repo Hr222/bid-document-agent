@@ -14,7 +14,7 @@ from app.modules.online.application.rule_retrieval.contracts import (
 )
 from app.modules.online.application.rule_retrieval.models import RulePack
 from app.modules.online.contracts import AnswerCitationResult
-from app.modules.online.domain.policy import (
+from app.modules.online.domain.checklist import (
     CHECKLIST_SCENARIO_REGISTRY,
     ChecklistScenarioDefinition,
     ChecklistScenarioRegistry,

@@ -14,13 +14,13 @@ from app.modules.online.application.rule_retrieval import (
     RetrievalSearcher,
     RuleRetrievalRequest,
 )
-from app.modules.online.domain.decision_result import DecisionResult, DecisionReviewCommand
-from app.modules.online.domain.policy import (
+from app.modules.online.domain.checklist import (
     CHECKLIST_SCENARIO_REGISTRY,
     COURT_EVALUATION_MATERIALS_SCENARIO,
     ChecklistScenarioRegistry,
     RuleDrivenChecklistPolicy,
 )
+from app.modules.online.domain.decision_result import DecisionResult, DecisionReviewCommand
 
 INSUFFICIENT_EVIDENCE_REASONING = [
     "当前命中的规则片段不足以稳定提取完整申请材料清单。",

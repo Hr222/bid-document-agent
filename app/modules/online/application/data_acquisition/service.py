@@ -6,7 +6,7 @@ from app.modules.online.application.data_acquisition.contracts import (
 from app.modules.online.application.data_acquisition.models import ChecklistDataPack
 from app.modules.online.application.data_acquisition.providers import InlineChecklistDataProvider
 from app.modules.online.application.data_acquisition.registry import ChecklistDataProviderRegistry
-from app.modules.online.domain.policy import COURT_EVALUATION_MATERIALS_SCENARIO
+from app.modules.online.domain.checklist import COURT_EVALUATION_MATERIALS_SCENARIO
 
 
 class PolicyDataAcquisitionService:

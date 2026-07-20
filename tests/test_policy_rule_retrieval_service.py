@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.modules.online.domain.policy import CHECKLIST_SCENARIO_REGISTRY
+from app.modules.online.domain.checklist import CHECKLIST_SCENARIO_REGISTRY
 from app.interfaces.http.schemas import (
     RetrievalDebugInfo,
     RetrievalFilters,

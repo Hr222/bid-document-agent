@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.infrastructure.persistence.repositories.policy_repository import RetrievedPolicyChunk
+from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
 from app.modules.knowledge.retrieval import HybridHitFusionService, HybridRetrievalPipeline
 
 

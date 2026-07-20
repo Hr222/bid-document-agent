@@ -1,8 +1,8 @@
 from app.composition import ApplicationContainer
+from app.infrastructure.filesystem.upload_service import PolicyUploadService
 from app.modules.ingestion.pipeline import (
     PolicyIngestionService,
     PolicyPipelineService,
-    PolicyUploadService,
 )
 from app.modules.online.application.data_acquisition import (
     ChecklistDataProviderRegistry,
@@ -10,7 +10,7 @@ from app.modules.online.application.data_acquisition import (
 )
 from app.modules.online.application.rule_retrieval import PolicyRuleRetrievalService
 from app.modules.knowledge.retrieval import KnowledgeRetrievalService
-from app.infrastructure.llm.rag_answer_generator import RagAnswerGenerator
+from app.infrastructure.llm.llm_client import RagAnswerGenerator
 
 
 def test_ingestion_services_are_exported_from_new_package() -> None:

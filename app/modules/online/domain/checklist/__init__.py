@@ -5,7 +5,7 @@
 这一层只关心业务判断，不直接操作数据库，也不直接定义 API 请求/响应结构。
 """
 
-from app.modules.online.domain.policy.checklist import (
+from app.modules.online.domain.checklist.definitions import (
     COURT_EVALUATION_MATERIALS_SCENARIO,
     ChecklistEvaluationResult,
     ChecklistRequirementComponent,
@@ -16,19 +16,10 @@ from app.modules.online.domain.policy.checklist import (
     ChecklistScenarioDefinition,
     RuleDrivenChecklistPolicy,
 )
-from app.modules.online.domain.policy.registry import (
+from app.modules.online.domain.checklist.registry import (
     CHECKLIST_SCENARIO_REGISTRY,
     ChecklistScenarioRegistry,
     ScenarioNotFoundError,
-)
-from app.modules.online.domain.policy.rules import (
-    PolicyChunkingPolicy,
-    PolicyIdentityPolicy,
-    PolicyIntakeDecision,
-    PolicyIntakePolicy,
-    PolicyRetrievalQueryPolicy,
-    PolicySectionStructurePolicy,
-    RetrievalKeywordPlan,
 )
 
 __all__ = [
@@ -42,13 +33,6 @@ __all__ = [
     "ChecklistRulePack",
     "ChecklistScenarioRegistry",
     "ChecklistScenarioDefinition",
-    "PolicyChunkingPolicy",
-    "PolicyIdentityPolicy",
-    "PolicyIntakeDecision",
-    "PolicyIntakePolicy",
-    "PolicyRetrievalQueryPolicy",
-    "PolicySectionStructurePolicy",
-    "RetrievalKeywordPlan",
     "RuleDrivenChecklistPolicy",
     "ScenarioNotFoundError",
 ]

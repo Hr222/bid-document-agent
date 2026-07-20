@@ -71,7 +71,7 @@ flowchart LR
     class Composition composition;
 ```
 
-## 目标物理目录结构
+## 当前物理目录结构
 
 ```text
 app/
@@ -83,9 +83,10 @@ app/
 │   │   │   └── policy_decision.py
 │   │   ├── domain/
 │   │   │   ├── checklist/
-│   │   │   ├── rules/
+│   │   │   │   ├── definitions.py
+│   │   │   │   └── registry.py
 │   │   │   └── decision_result.py
-│   │   └── contracts/
+│   │   └── contracts.py
 │   │
 │   ├── knowledge/                        # 知识能力层
 │   │   ├── application/
@@ -99,7 +100,8 @@ app/
 │   │   │   ├── write_port.py
 │   │   │   └── publication_port.py
 │   │   └── retrieval/
-│   │       ├── hybrid_pipeline.py
+│   │       ├── pipeline.py
+│   │       ├── policies.py
 │   │       ├── rerank.py
 │   │       └── vector_search.py
 │   │
@@ -107,18 +109,16 @@ app/
 │       ├── application/
 │       │   └── ingestion_use_case.py
 │       ├── domain/
-│       │   ├── document.py
-│       │   └── ingestion_job.py
+│       │   └── policies.py
 │       ├── ports/
 │       │   ├── file_port.py
-│       │   └── embedding_port.py
+│       │   ├── embedding_port.py
+│       │   └── ocr_port.py
 │       └── pipeline/
-│           ├── parser.py
-│           ├── ocr.py
-│           ├── cleaner.py
-│           ├── section_splitter.py
-│           ├── chunker.py
-│           └── embedding.py
+│           ├── pipeline.py
+│           ├── context.py
+│           ├── persistence.py
+│           └── steps/
 │
 ├── interfaces/                           # 外部接口层
 │   ├── http/                             # 给前端的 HTTP API
@@ -141,7 +141,10 @@ app/
 │   │   ├── llm_client.py
 │   │   └── embedding_client.py
 │   ├── ocr/
+│   │   └── tencent_ocr.py
 │   └── filesystem/
+│       ├── policy_file_service.py
+│       └── upload_service.py
 │
 ├── composition/                          # Composition Root
 │   ├── root.py
@@ -224,7 +227,10 @@ flowchart LR
         Pipeline["解析 / OCR / 清洗<br/>分节 / 切块 / 向量化"]
     end
 
+    PublicationHttp["HTTP Publication Route"]
+
     HTTP --> HttpAdapter
+    HTTP --> PublicationHttp
     Agent --> ToolAdapter
 
     HttpAdapter --> Facade
@@ -243,7 +249,7 @@ flowchart LR
     Ingest --> Pipeline
     Pipeline --> Write
     Write --> WriteRepo
-    WriteRepo --> Publish
+    PublicationHttp --> Publish
     Publish --> PublishRepo
     PublishRepo --> Store
 ```
