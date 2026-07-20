@@ -335,16 +335,12 @@ class PolicyRepository:
             .join(PolicyDocument, PolicyDocument.id == PolicyVersion.policy_id)
             .outerjoin(PolicySection, PolicySection.id == PolicyChunk.section_id)
             .where(
-                PolicyVersion.version_status.in_(
-                    ("active", "superseded", "retired")
-                    if include_history
-                    else ("active",)
-                )
+                PolicyVersion.version_status.in_(("draft", "approved", "active"))
             )
         )
 
         if not include_history:
-            statement = statement.where(PolicyDocument.current_version_id == PolicyVersion.id)
+            statement = statement.where(PolicyDocument.latest_version_id == PolicyVersion.id)
         if policy_category:
             statement = statement.where(PolicyDocument.policy_category == policy_category)
         if responsible_department:
@@ -425,16 +421,12 @@ class PolicyRepository:
             .join(PolicyDocument, PolicyDocument.id == PolicyVersion.policy_id)
             .outerjoin(PolicySection, PolicySection.id == PolicyChunk.section_id)
             .where(
-                PolicyVersion.version_status.in_(
-                    ("active", "superseded", "retired")
-                    if include_history
-                    else ("active",)
-                )
+                PolicyVersion.version_status.in_(("draft", "approved", "active"))
             )
         )
 
         if not include_history:
-            statement = statement.where(PolicyDocument.current_version_id == PolicyVersion.id)
+            statement = statement.where(PolicyDocument.latest_version_id == PolicyVersion.id)
         if policy_category:
             statement = statement.where(PolicyDocument.policy_category == policy_category)
         if responsible_department:
