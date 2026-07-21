@@ -303,7 +303,7 @@ def test_section_match_requires_expected_document_not_just_same_section_title() 
         BenchmarkCaseResult(
             case_id="case-1",
             query="适用于哪些人",
-            expected_document_name="6、示例公司人事管理制度",
+            expected_document_name="示例人事制度",
             expected_section_title="第二条",
             strategy_results={
                 "exact": StrategyCaseResult(

@@ -72,7 +72,7 @@ def test_pipeline_uses_exact_vector_strategy_from_settings(monkeypatch) -> None:
         )
         result = pipeline.run(
             RetrievalSearchRequest(
-                query="人事管理制度适用于哪些人",
+                query="示例管理制度适用于哪些范围",
                 top_k=3,
             )
         )
@@ -98,7 +98,7 @@ def test_pipeline_uses_hnsw_vector_strategy_from_settings(monkeypatch) -> None:
         )
         result = pipeline.run(
             RetrievalSearchRequest(
-                query="人事管理制度适用于哪些人",
+                query="示例管理制度适用于哪些范围",
                 top_k=3,
             )
         )

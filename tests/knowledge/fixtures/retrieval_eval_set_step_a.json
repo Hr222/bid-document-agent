@@ -1,162 +1,32 @@
 [
   {
-    "case_id": "HR-001",
-    "query": "人事管理制度适用于哪些人",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第二条",
+    "case_id": "SYNTHETIC-001",
+    "query": "信息安全制度适用于哪些范围",
+    "expected_document_name": "示例信息安全制度",
+    "expected_section_title": "第一条",
     "policy_category": "管理制度",
     "question_type": "适用范围",
-    "tags": ["总则", "适用范围", "对象"],
-    "notes": "验证适用对象类问题的条款召回。"
+    "tags": ["信息安全", "适用范围"],
+    "notes": "合成样例：验证适用范围类问题的条款召回。"
   },
   {
-    "case_id": "HR-002",
-    "query": "员工试用期多久",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第五条",
-    "policy_category": "管理制度",
-    "question_type": "时效",
-    "tags": ["录用", "试用期", "时长"],
-    "notes": "验证试用期限类问题的稳定命中。"
-  },
-  {
-    "case_id": "HR-003",
-    "query": "工资什么时候发",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第十九条",
-    "policy_category": "管理制度",
-    "question_type": "时效",
-    "tags": ["待遇", "工资", "发放时间"],
-    "notes": "验证薪酬发放时间类问题。"
-  },
-  {
-    "case_id": "HR-004",
-    "query": "法定节假日加班工资怎么算",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第二十七条",
-    "policy_category": "管理制度",
-    "question_type": "计算规则",
-    "tags": ["加班", "节假日", "薪资计算"],
-    "notes": "验证带数值规则的问题能否命中加班条款。"
-  },
-  {
-    "case_id": "HR-005",
-    "query": "员工出差回来后要做什么",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第三十三条",
+    "case_id": "SYNTHETIC-002",
+    "query": "采购审批需要经过哪些步骤",
+    "expected_document_name": "示例采购管理办法",
+    "expected_section_title": "第三条",
     "policy_category": "管理制度",
     "question_type": "流程",
-    "tags": ["出差", "流程", "报销"],
-    "notes": "验证流程动作类问题。"
+    "tags": ["采购", "审批", "流程"],
+    "notes": "合成样例：验证流程类问题的稳定命中。"
   },
   {
-    "case_id": "HR-006",
-    "query": "员工可以私自复印公司文件吗",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第四十六条",
-    "policy_category": "管理制度",
-    "question_type": "禁止性规定",
-    "tags": ["保密", "文件", "复印"],
-    "notes": "验证否定约束类问题。"
-  },
-  {
-    "case_id": "HR-007",
-    "query": "员工多久考核一次",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第四十九条",
-    "policy_category": "管理制度",
-    "question_type": "频次",
-    "tags": ["考核", "频次", "试用期"],
-    "notes": "验证频次和条件混合的规则条款。"
-  },
-  {
-    "case_id": "HR-008",
-    "query": "什么情况下员工会被表彰",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第五十四条",
-    "policy_category": "管理制度",
-    "question_type": "条件",
-    "tags": ["奖惩", "表彰", "条件"],
-    "notes": "验证奖励条件类问题。"
-  },
-  {
-    "case_id": "HR-009",
-    "query": "员工有哪些行为会被除名",
-    "expected_document_name": "6、示例公司人事管理制度",
-    "expected_section_title": "第六十条",
-    "policy_category": "管理制度",
-    "question_type": "条件",
-    "tags": ["奖惩", "除名", "违规"],
-    "notes": "验证严重处罚类问题。"
-  },
-  {
-    "case_id": "CHARTER-001",
-    "query": "公司的营业期限为多久",
-    "expected_document_name": "示例公司章程",
-    "expected_section_title": "第六条",
-    "policy_category": "公司章程",
-    "question_type": "时效",
-    "tags": ["公司章程", "营业期限", "基本信息"],
-    "notes": "验证章程类资料中的基础事实条款能否稳定命中。"
-  },
-  {
-    "case_id": "CHARTER-002",
-    "query": "公司根据业务需要可以设立什么",
-    "expected_document_name": "示例公司章程",
+    "case_id": "SYNTHETIC-003",
+    "query": "服务项目质量复核如何执行",
+    "expected_document_name": "示例质量管理办法",
     "expected_section_title": "第五条",
-    "policy_category": "公司章程",
-    "question_type": "条件",
-    "tags": ["公司章程", "分公司", "办事机构"],
-    "notes": "验证章程类资料的组织设立类条款。"
-  },
-  {
-    "case_id": "FEE-001",
-    "query": "人民法院选择委托评估拍卖机构实行什么原则",
-    "expected_document_name": "广东省高级人民法院关于委托评估拍卖工作的若干规定",
-    "expected_section_title": "第二条",
-    "policy_category": "收费标准",
-    "question_type": "原则",
-    "tags": ["收费标准", "评估拍卖", "原则"],
-    "notes": "验证收费/规范类资料中的原则性条款召回。"
-  },
-  {
-    "case_id": "FEE-002",
-    "query": "申请参与委托评估的机构应提交哪些资料",
-    "expected_document_name": "广东省高级人民法院关于委托评估拍卖工作的若干规定",
-    "expected_section_title": "第十条",
-    "policy_category": "收费标准",
-    "question_type": "材料要求",
-    "tags": ["收费标准", "申请材料", "委托评估"],
-    "notes": "验证材料要求类问题能否定位到具体条款。"
-  },
-  {
-    "case_id": "FEE-003",
-    "query": "资产评估机构不得进行什么竞争",
-    "expected_document_name": "湖南省资产评估收费管理实施办法",
-    "expected_section_title": "第四条",
-    "policy_category": "收费标准",
-    "question_type": "禁止性规定",
-    "tags": ["收费标准", "不正当竞争", "禁止"],
-    "notes": "验证收费管理办法中的禁止性规定。"
-  },
-  {
-    "case_id": "CREDIT-001",
-    "query": "近两年内是否收到投诉有无不良执业记录",
-    "expected_document_name": "示例公司土地无不良记录证明",
-    "expected_section_title": "全文",
-    "policy_category": "无违规记录",
-    "question_type": "条件",
-    "tags": ["无违规记录", "投诉", "执业记录"],
-    "notes": "验证证明类资料中的结论性事实表述。"
-  },
-  {
-    "case_id": "CREDIT-002",
-    "query": "无不良执业记录证明仅供什么使用",
-    "expected_document_name": "示例公司土地无不良记录证明",
-    "expected_section_title": "全文",
-    "policy_category": "无违规记录",
-    "question_type": "适用范围",
-    "tags": ["无违规记录", "适用范围", "证明用途"],
-    "notes": "验证证明类资料中的用途限制类表述。"
+    "policy_category": "管理制度",
+    "question_type": "流程",
+    "tags": ["质量", "复核", "服务项目"],
+    "notes": "合成样例：验证质量复核类问题的召回。"
   }
 ]

@@ -56,7 +56,7 @@ def _hit(
         document_id=1,
         version_id=1,
         chunk_id=chunk_id,
-        policy_name="6、示例公司人事管理制度",
+        policy_name="示例管理制度",
         policy_category="人事制度",
         responsible_department="人力资源部",
         version_label="2025",
@@ -72,12 +72,12 @@ def _hit(
 
 
 def test_rerank_promotes_scope_clause_to_top1() -> None:
-    # 模拟 HR-001 风格问题：第二条虽然原始融合分略低，但正文更直接回答“适用于哪些人”。
+    # 合成适用范围问题：第二条虽然原始融合分略低，但正文更直接回答问题。
     pipeline = HybridRetrievalPipeline(
         repository=object(),
         embedding_service=StubEmbeddingService(),
     )
-    keyword_plan = pipeline.query_policy.build_keyword_plan("人事管理制度适用于哪些人")
+    keyword_plan = pipeline.query_policy.build_keyword_plan("管理制度适用于哪些人")
     hits = [
         _hit(
             chunk_id=1,
@@ -98,7 +98,7 @@ def test_rerank_promotes_scope_clause_to_top1() -> None:
     ]
 
     reranked_hits = pipeline._rerank_hits(
-        query="人事管理制度适用于哪些人",
+        query="管理制度适用于哪些人",
         keyword_plan=keyword_plan,
         hits=hits,
     )
@@ -184,7 +184,7 @@ def test_pipeline_run_emits_rerank_stage_and_score_breakdown() -> None:
 
     result = pipeline.run(
         RetrievalSearchRequest(
-            query="人事管理制度适用于哪些人",
+        query="管理制度适用于哪些人",
             top_k=5,
         )
     )

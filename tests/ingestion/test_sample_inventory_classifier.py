@@ -54,11 +54,11 @@ def test_classify_file_routes_pipeline_and_business_labels(tmp_path: Path) -> No
     root = tmp_path / "samples"
     root.mkdir()
 
-    charter_pdf = root / "20、公司章程" / "最新章程.pdf"
+    charter_pdf = root / "示例章程" / "最新章程.pdf"
     charter_pdf.parent.mkdir(parents=True)
-    certificate_image = root / "2、资质证书" / "资产评估资质证书.png"
+    certificate_image = root / "示例证书" / "示例资质证书.png"
     certificate_image.parent.mkdir(parents=True)
-    logo_png = root / "通用文件" / "公司logo.png"
+    logo_png = root / "示例文件" / "示例logo.png"
     logo_png.parent.mkdir(parents=True)
 
     build_pdf(charter_pdf, ["章程正文"])
@@ -102,7 +102,7 @@ def test_classify_file_marks_org_chart_doc_as_structured_medium(tmp_path: Path) 
     root = tmp_path / "samples"
     root.mkdir()
 
-    doc_path = root / "22、公司组织架构" / "公司组织架构图.doc"
+    doc_path = root / "示例组织架构" / "示例组织架构图.doc"
     doc_path.parent.mkdir(parents=True)
     doc_path.write_bytes(b"legacy-doc")
 
