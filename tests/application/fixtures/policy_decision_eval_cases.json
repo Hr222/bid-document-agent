@@ -1,0 +1,86 @@
+[
+  {
+    "case_id": "rule-evidence-insufficient",
+    "description": "命中的规则片段不足以提取完整清单",
+    "retrieval_text": "申请参与委托评估的机构应提交资料，具体要求以法院通知为准。",
+    "submitted_materials": ["申请书", "营业执照副本"],
+    "submitted_materials_provided": true,
+    "expected": {
+      "decision": "insufficient_evidence",
+      "missing_input_fields": [],
+      "missing_fields": [],
+      "used_fields_count": 0,
+      "citation_count": 1
+    }
+  },
+  {
+    "case_id": "business-input-missing",
+    "description": "请求未提供业务材料字段",
+    "retrieval_text": "第十条 申请参与委托评估（审计）的机构应提交如下审验资料：\n(1)申请书、登记表及机构简介；\n(2)经年检合格的企业法人营业执照副本和税务登记证副本；\n(3)经年检合格的机构资质、资格证书副本；\n(4)机构评估（审计）人员名单及其相关资质、机构营业场所证明资料；\n(5)资格证书副本；\n(6)注资证明及资产明细表；\n(7)税务机关出具的纳税证明；\n(8)法院指定提交的其他资料。",
+    "submitted_materials": [],
+    "submitted_materials_provided": false,
+    "expected": {
+      "decision": "insufficient_evidence",
+      "missing_input_fields": ["已提交材料列表"],
+      "missing_fields": [],
+      "used_fields_count": 0,
+      "citation_count": 1
+    }
+  },
+  {
+    "case_id": "materials-incomplete",
+    "description": "规则完整但部分必需材料缺失",
+    "retrieval_text": "第十条 申请参与委托评估（审计）的机构应提交如下审验资料：\n(1)申请书、登记表及机构简介；\n(2)经年检合格的企业法人营业执照副本和税务登记证副本；\n(3)经年检合格的机构资质、资格证书副本；\n(4)机构评估（审计）人员名单及其相关资质、机构营业场所证明资料；\n(5)资格证书副本；\n(6)注资证明及资产明细表；\n(7)税务机关出具的纳税证明；\n(8)法院指定提交的其他资料。",
+    "submitted_materials": [
+      "申请书",
+      "机构简介",
+      "营业执照副本",
+      "税务登记证副本",
+      "机构资质证书副本",
+      "评估人员名单",
+      "相关资质说明",
+      "营业场所证明",
+      "纳税证明"
+    ],
+    "submitted_materials_provided": true,
+    "expected": {
+      "decision": "fail",
+      "missing_input_fields": [],
+      "missing_fields": [
+        "资格证书副本",
+        "注资证明及资产明细表",
+        "法院指定提交的其他资料"
+      ],
+      "used_fields_count": 5,
+      "citation_count": 1
+    }
+  },
+  {
+    "case_id": "materials-complete",
+    "description": "规则完整且材料覆盖全部要求",
+    "retrieval_text": "第十条 申请参与委托评估（审计）的机构应提交如下审验资料：\n(1)申请书、登记表及机构简介；\n(2)经年检合格的企业法人营业执照副本和税务登记证副本；\n(3)经年检合格的机构资质、资格证书副本；\n(4)机构评估（审计）人员名单及其相关资质、机构营业场所证明资料；\n(5)资格证书副本；\n(6)注资证明及资产明细表；\n(7)税务机关出具的纳税证明；\n(8)法院指定提交的其他资料。",
+    "submitted_materials": [
+      "申请书",
+      "机构简介",
+      "企业法人营业执照副本",
+      "税务登记证副本",
+      "机构资质证书副本",
+      "评估人员名单",
+      "相关资质",
+      "机构营业场所证明资料",
+      "资格证书副本",
+      "注资证明",
+      "资产明细表",
+      "纳税证明",
+      "法院指定资料"
+    ],
+    "submitted_materials_provided": true,
+    "expected": {
+      "decision": "pass",
+      "missing_input_fields": [],
+      "missing_fields": [],
+      "used_fields_count": 8,
+      "citation_count": 1
+    }
+  }
+]

@@ -92,7 +92,7 @@
   {
     "case_id": "CHARTER-001",
     "query": "公司的营业期限为多久",
-    "expected_document_name": "示例公司公司章程",
+    "expected_document_name": "示例公司章程",
     "expected_section_title": "第六条",
     "policy_category": "公司章程",
     "question_type": "时效",
@@ -102,7 +102,7 @@
   {
     "case_id": "CHARTER-002",
     "query": "公司根据业务需要可以设立什么",
-    "expected_document_name": "示例公司公司章程",
+    "expected_document_name": "示例公司章程",
     "expected_section_title": "第五条",
     "policy_category": "公司章程",
     "question_type": "条件",
