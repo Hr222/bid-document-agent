@@ -17,6 +17,9 @@ from app.modules.ingestion.contracts import (
 class PolicyIngestionService:
     """目录扫描辅助服务，不属于单文件入库步骤 1 到步骤 8 的主流水线。"""
 
+    # TODO: 后续可将候选判定、文件名推导和文件哈希等纯逻辑抽到独立 util，
+    # 让本服务只负责目录遍历、扫描编排和响应组装。
+
     _image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
     _excluded_extensions = {".zip", ".rar", ".7z"}
     _supported_extensions = {".doc", ".docx", ".pdf", *_image_extensions}
