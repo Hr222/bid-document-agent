@@ -29,6 +29,8 @@ class ChecklistDataAcquisitionRequest:
 
     scenario_code: str
     checklist_request: ChecklistInput | object
+    input_field_key: str = "submitted_materials"
+    input_field_label: str = "已提交材料列表"
 
     def __post_init__(self) -> None:
         if not isinstance(self.checklist_request, ChecklistInput):

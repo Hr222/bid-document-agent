@@ -8,8 +8,8 @@ from app.infrastructure.persistence.schema_health import (
 from app.interfaces.http.assemblers.policy_decision import decision_command, decision_response
 from app.interfaces.http.dependencies import get_policy_decision_application_service
 from app.interfaces.http.schemas.policy_decision import (
-    PolicyDecisionChecklistRequest,
-    PolicyDecisionChecklistResponse,
+    PolicyDecisionRequest,
+    PolicyDecisionResponse,
 )
 from app.modules.online.application.policy_decision import PolicyDecisionApplicationService
 from app.shared.exceptions import UpstreamServiceError
@@ -19,15 +19,40 @@ router = APIRouter()
 
 @router.post(
     "/policy-decisions/court-evaluation-materials/review",
-    response_model=PolicyDecisionChecklistResponse,
+    response_model=PolicyDecisionResponse,
 )
 async def review_court_evaluation_materials(
-    request: PolicyDecisionChecklistRequest,
+    request: PolicyDecisionRequest,
     service: PolicyDecisionApplicationService = Depends(get_policy_decision_application_service),
-) -> PolicyDecisionChecklistResponse:
+) -> PolicyDecisionResponse:
     """通过在线决策应用层暴露当前材料核验能力。"""
+    return await _review_policy_decision(request, service)
+
+
+@router.post(
+    "/policy-decisions/{scenario_code}/review",
+    response_model=PolicyDecisionResponse,
+)
+async def review_policy_decision(
+    scenario_code: str,
+    request: PolicyDecisionRequest,
+    service: PolicyDecisionApplicationService = Depends(get_policy_decision_application_service),
+) -> PolicyDecisionResponse:
+    """通过场景编码复用统一的规则决策链路。"""
+    return await _review_policy_decision(request, service, scenario_code=scenario_code)
+
+
+async def _review_policy_decision(
+    request: PolicyDecisionRequest,
+    service: PolicyDecisionApplicationService,
+    *,
+    scenario_code: str | None = None,
+) -> PolicyDecisionResponse:
+    """统一处理兼容入口与通用入口的异常映射。"""
     try:
-        return decision_response(service.review(decision_command(request)))
+        return decision_response(
+            service.review(decision_command(request, scenario_code=scenario_code))
+        )
     except ProgrammingError as exc:
         if is_missing_kb_schema_error(exc):
             raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc

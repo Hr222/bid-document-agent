@@ -13,6 +13,7 @@ class DecisionReviewCommand:
     document_id: int | None = None
     include_history: bool = False
     submitted_materials_provided: bool = True
+    scenario_code: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

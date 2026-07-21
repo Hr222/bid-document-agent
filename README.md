@@ -39,72 +39,13 @@ Bid Document Agent 当前围绕三类核心能力建设：
 
 ## 核心能力
 
-### 文档入库
-
-支持文档从接入到知识库写入的完整流程：
-
-- 文件登记与准入校验
-- DOC / DOCX / PDF / 图片处理
-- 文档解析与 OCR
-- 文本清洗
-- 章节拆分
-- Chunk 切分
-- Embedding 生成
-- 文档、版本、章节、切块持久化
-- 预览与正式入库分离
-
-### 知识检索
-
-当前检索链路由知识模块统一负责：
-
-- 向量召回
-- 关键词召回
-- 双路结果融合
-- 结果去重
-- 启发式 rerank
-- 最低分过滤
-- 召回来源追踪
-- 阶段调试信息输出
-- Exact / HNSW 向量策略切换
-
-### RAG 问答
-
-在线应用层提供统一的 RAG 外观：
-
-- `search`：只执行知识检索
-- `ask`：先检索，再基于命中证据生成回答
-- 返回引用文档、版本、章节、页码和原文片段
-- 无有效证据时拒绝生成无依据结论
-
-### 业务规则判断
-
-当前已完成一个规则驱动的业务 PoC：
-
-> 委托评估机构申请材料核验
-
-该链路包含：
-
-- 规则获取
-- 材料数据获取
-- 领域规则匹配
-- 缺失材料识别
-- 引用证据输出
-- `pass / fail / insufficient_evidence` 结构化结果
-- 调试信息和来源追踪
-
-### Agent 接入边界
-
-项目已经预留 LangChain / LangGraph 的 Function Calling 接入边界：
-
-```text
-LangChain / LangGraph
-  -> Function Calling Adapter
-  -> AskKnowledgeUseCase
-  -> RAG Application Facade
-  -> Knowledge Query Capability
-```
-
-当前阶段只提供稳定的能力接口，不提前引入复杂 Agent 编排。
+| 核心能力 | 定位 | 能力明细 |
+|---|---|---|
+| 文档入库 | 支持文档从接入到知识库写入的完整流程 | 文件登记与准入校验<br>DOC / DOCX / PDF / 图片处理<br>文档解析与 OCR<br>文本清洗<br>章节拆分<br>Chunk 切分<br>Embedding 生成<br>文档、版本、章节、切块持久化<br>预览与正式入库分离 |
+| 知识检索 | 由知识模块统一负责检索链路 | 向量召回<br>关键词召回<br>双路结果融合<br>结果去重<br>启发式 rerank<br>最低分过滤<br>召回来源追踪<br>阶段调试信息输出<br>Exact / HNSW 向量策略切换 |
+| RAG 问答 | 在线应用层提供统一的 RAG 外观 | `search`：只执行知识检索<br>`ask`：先检索，再基于命中证据生成回答<br>返回引用文档、版本、章节、页码和原文片段<br>无有效证据时拒绝生成无依据结论 |
+| 业务规则判断 | 已完成“委托评估机构申请材料核验”规则驱动 PoC | 规则获取<br>材料数据获取<br>领域规则匹配<br>缺失材料识别<br>引用证据输出<br>`pass / fail / insufficient_evidence` 结构化结果<br>调试信息和来源追踪 |
+| Agent 接入边界 | 预留 LangChain / LangGraph 的 Function Calling 接入边界；当前阶段只提供稳定的能力接口，不提前引入复杂 Agent 编排 | `LangChain / LangGraph` → `Function Calling Adapter` → `AskKnowledgeUseCase` → `RAG Application Facade` → `Knowledge Query Capability` |
 
 ## 目标架构
 
@@ -191,52 +132,15 @@ tests/
 
 ## 架构原则
 
-### 应用模块与知识能力分离
+> **统一依赖方向：** 接口层 → 应用层 → 知识 / 领域能力 → Ports ← 基础设施实现。具体适配器只在 Composition Root 中组装。
 
-在线应用不直接访问数据库、向量索引或具体检索策略，只依赖知识查询能力。
-
-入库应用不直接依赖具体 Repository，只通过知识写入能力完成持久化。
-
-### HTTP Schema 与内部契约分离
-
-HTTP 请求和响应模型只存在于接口层。
-
-Assembler 负责：
-
-- HTTP Schema 转内部 Command
-- 内部 Result 转 HTTP Response
-- 防止应用层反向依赖 FastAPI 或前端结构
-
-### 仓储通过 Ports 抽象
-
-知识模块定义读取、写入和发布端口。
-
-基础设施层实现这些端口，具体数据库、ORM 和 pgvector 细节不会泄漏到领域层和应用层。
-
-### Composition Root 统一组装
-
-所有具体适配器在 `ApplicationContainer` 中组装：
-
-- Repository
-- LLM Client
-- Embedding Client
-- OCR Service
-- File Service
-- Application Use Case
-
-### 个人项目也遵守工程边界
-
-个人项目不代表可以忽略工程质量。
-
-当前项目重点保持：
-
-- 模块职责清晰
-- 输入输出可验证
-- 关键链路可测试
-- 结果来源可追踪
-- 敏感数据不进入测试目录
-- 外部依赖可替换
-- 架构变更可持续演进
+| 架构原则 | 核心约束 | 落地方式 |
+|---|---|---|
+| 应用模块与知识能力分离 | 应用模块只依赖稳定的知识能力，不感知底层实现 | 在线应用通过知识查询能力完成检索，不直接访问数据库、向量索引或具体检索策略；入库应用通过知识写入能力完成持久化，不直接依赖具体 Repository |
+| HTTP Schema 与内部契约分离 | HTTP 请求和响应模型只存在于接口层，应用层不依赖 FastAPI 或前端结构 | Assembler 负责 `HTTP Schema → Command` 和 `Result → HTTP Response` 的双向转换 |
+| 仓储通过 Ports 抽象 | 端口由内层定义，实现由外层提供 | 知识模块定义读取、写入和发布端口；基础设施层实现这些端口，数据库、ORM 和 pgvector 细节不得泄漏到领域层和应用层 |
+| Composition Root 统一组装 | 具体实现的选择和对象依赖关系集中在唯一入口 | `ApplicationContainer` 统一组装 Repository、LLM Client、Embedding Client、OCR Service、File Service 和 Application Use Case |
+| 工程边界持续有效 | 项目规模不影响工程质量要求 | 保持模块职责清晰、输入输出可验证、关键链路可测试、结果来源可追踪、敏感数据不进入测试目录、外部依赖可替换、架构可持续演进 |
 
 ## 本地运行
 
@@ -364,29 +268,15 @@ npm run build
 
 ## 项目路线
 
-### 已完成
+> **演进路径：** 检索与入库底座 → 单场景规则 PoC → 结果生成通用化 → 多场景 Agent 能力。
 
-- RAG 最小闭环
-- 文档入库链路
-- 混合检索与 rerank
-- HNSW 策略准备
-- Online / Knowledge / Ingestion 架构拆分
-- Repository 与 Ports 抽象
-- Milestone D 的 D1、D2、D3 首版能力
-
-### 当前推进
-
-- Milestone D / D4：结果生成链路通用化
-- 继续完善单场景 PoC 的验收与回归资产
-- 保持规则、数据和结果之间的可解释性
-
-### 后续规划
-
-- 扩展第二类业务规则场景
-- 接入真实业务数据 Provider
-- 引入 LangChain / LangGraph 编排
-- 支持更多 Agent 工具调用能力
-- 扩展历史案例、模板和文档生成能力
+| 路线阶段 | 状态 | 主要交付 / 目标 |
+|---|---|---|
+| 检索与入库底座 | 已完成 | RAG 最小闭环<br>文档入库链路<br>混合检索与 rerank<br>HNSW 策略准备 |
+| 架构边界建设 | 已完成 | Online / Knowledge / Ingestion 架构拆分<br>Repository 与 Ports 抽象 |
+| Milestone D / D1-D3 | 已完成 | 规则场景 PoC<br>规则获取抽象<br>数据获取抽象 |
+| Milestone D / D4 | 当前推进 | 结果生成链路通用化<br>完善单场景 PoC 的验收与回归资产<br>保持规则、数据和结果之间的可解释性 |
+| 多场景与 Agent 演进 | 后续规划 | 扩展第二类业务规则场景<br>接入真实业务数据 Provider<br>引入 LangChain / LangGraph 编排<br>支持更多 Agent 工具调用能力<br>扩展历史案例、模板和文档生成能力 |
 
 ## 相关文档
 

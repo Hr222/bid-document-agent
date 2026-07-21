@@ -34,6 +34,13 @@ class ChecklistScenarioRegistry:
             raise ScenarioNotFoundError(f"未注册的 checklist 场景：{scenario_code}")
         return definition
 
+    def default(self) -> ChecklistScenarioDefinition:
+        """返回未指定场景时使用的默认场景定义。"""
+        try:
+            return next(iter(self._definitions.values()))
+        except StopIteration as exc:
+            raise ScenarioNotFoundError("当前未注册有效的 checklist 场景。") from exc
+
     def list_all(self) -> tuple[ChecklistScenarioDefinition, ...]:
         """列出当前已接入的全部 checklist 场景。"""
         return tuple(self._definitions.values())

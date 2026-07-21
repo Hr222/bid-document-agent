@@ -19,7 +19,7 @@ from app.modules.online.domain.decision_result import (
 from app.shared.config import settings
 
 
-class PolicyDecisionResultBuilder:
+class DecisionResultBuilder:
     """将规则评估结果组装为在线应用层内部结果。"""
 
     def __init__(self, *, scenario: ChecklistScenarioDefinition) -> None:
@@ -124,6 +124,43 @@ class PolicyDecisionResultBuilder:
             ),
         )
 
+    def build_reasoning(
+        self,
+        *,
+        matched_requirement_count: int,
+        submitted_value_count: int,
+        missing_fields: list[str],
+    ) -> list[str]:
+        """根据通用规则、输入和缺失项信息生成可消费的判断依据。"""
+        reasoning = [
+            f"已从命中的规则片段中识别出 {matched_requirement_count} 项校验要求。",
+            f"本次收到 {submitted_value_count} 项业务输入。",
+        ]
+        reasoning.append(
+            f"仍缺少 {len(missing_fields)} 项必需要求。"
+            if missing_fields
+            else "当前业务输入已覆盖规则要求。"
+        )
+        return reasoning
+
+    def build_rule_insufficient_reasoning(self, insufficient_reason: str | None) -> list[str]:
+        """生成规则证据不足时的统一说明。"""
+        reasoning = [
+            "当前命中的规则证据不足以稳定提取完整的业务要求。",
+            "该场景应先确认规则依据，再继续进行字段校验。",
+        ]
+        if insufficient_reason:
+            reasoning.insert(1, insufficient_reason)
+        return reasoning
+
+    def build_data_insufficient_reasoning(self, insufficient_reason: str | None) -> list[str]:
+        """生成业务输入不足时的统一说明。"""
+        reasoning = ["当前业务输入不足，暂时无法完成稳定校验。"]
+        if insufficient_reason:
+            reasoning.append(insufficient_reason)
+        reasoning.append("请先补齐必要输入字段，再继续执行规则驱动校验。")
+        return reasoning
+
     def build_response(
         self,
         *,
@@ -150,3 +187,7 @@ class PolicyDecisionResultBuilder:
             requirement_statuses=requirement_statuses,
             debug=debug,
         )
+
+
+# 保留旧名称，避免已有应用层导入因结果 builder 通用化而中断。
+PolicyDecisionResultBuilder = DecisionResultBuilder

@@ -8,8 +8,8 @@ from app.interfaces.http.schemas.retrieval import AnswerCitation, RetrievalDebug
 from app.shared.config import settings
 
 
-class PolicyDecisionChecklistRequest(BaseModel):
-    """材料核验接口的请求结构。"""
+class PolicyDecisionRequest(BaseModel):
+    """规则决策接口的通用请求结构。"""
 
     submitted_materials: list[str] = Field(
         default_factory=list,
@@ -74,8 +74,8 @@ class PolicyDecisionDataAcquisitionDebug(BaseModel):
     field_traces: list[PolicyDecisionDataFieldTrace] = Field(default_factory=list)
 
 
-class PolicyDecisionChecklistResponse(BaseModel):
-    """材料核验接口的标准响应结构。"""
+class PolicyDecisionResponse(BaseModel):
+    """规则决策接口的通用响应结构。"""
 
     scenario_code: str
     scenario_name: str
@@ -87,3 +87,8 @@ class PolicyDecisionChecklistResponse(BaseModel):
     missing_fields: list[str]
     requirement_statuses: list[PolicyDecisionRequirementStatus]
     debug: PolicyDecisionDebugInfo
+
+
+# 保留旧名称，避免已有调用方因 D4 通用化改名而中断。
+PolicyDecisionChecklistRequest = PolicyDecisionRequest
+PolicyDecisionChecklistResponse = PolicyDecisionResponse

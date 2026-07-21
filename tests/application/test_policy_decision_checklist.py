@@ -8,6 +8,13 @@ from app.interfaces.http.schemas import (
     RetrievalStageDebug,
 )
 from app.modules.online.application.decision import RuleDrivenChecklistDecisionService
+from app.modules.online.domain.checklist import (
+    COURT_EVALUATION_MATERIALS_SCENARIO,
+    ChecklistRequirementComponent,
+    ChecklistRequirementDefinition,
+    ChecklistScenarioDefinition,
+    ChecklistScenarioRegistry,
+)
 from app.modules.online.domain.decision_result import DecisionReviewCommand
 
 RULE_CHUNK_TEXT = (
@@ -161,3 +168,50 @@ def test_rule_driven_checklist_returns_insufficient_evidence_for_missing_busines
     assert response.missing_input_fields == ("已提交材料列表",)
     assert response.missing_fields == ()
     assert response.debug.data_acquisition.missing_input_fields == ("已提交材料列表",)
+
+
+def test_rule_driven_checklist_reuses_the_same_chain_for_another_registered_scenario() -> None:
+    second_scenario = ChecklistScenarioDefinition(
+        scenario_code="company-registration-review",
+        scenario_name="企业登记材料核验",
+        retrieval_query="企业登记需要提交哪些材料",
+        policy_category="企业登记",
+        min_rule_match_count=1,
+        input_field_key="registration_materials",
+        input_field_label="已提交登记材料",
+        requirements=(
+            ChecklistRequirementDefinition(
+                field_key="registration_certificate",
+                label="登记证明",
+                components=(
+                    ChecklistRequirementComponent(
+                        label="登记证明",
+                        aliases=("登记证明",),
+                    ),
+                ),
+                evidence_keywords=("登记证明",),
+            ),
+        ),
+    )
+    scenario_registry = ChecklistScenarioRegistry(
+        definitions=(COURT_EVALUATION_MATERIALS_SCENARIO, second_scenario)
+    )
+    service = RuleDrivenChecklistDecisionService(
+        FakeRetrievalService([_make_hit("企业登记需要提交登记证明。")]),
+        scenario_registry=scenario_registry,
+    )
+
+    response = service.review(
+        DecisionReviewCommand(
+            scenario_code="company-registration-review",
+            submitted_materials=("登记证明",),
+        )
+    )
+
+    assert response.scenario_code == "company-registration-review"
+    assert response.scenario_name == "企业登记材料核验"
+    assert response.decision == "pass"
+    assert response.debug.retrieval_query == "企业登记需要提交哪些材料"
+    assert response.requirement_statuses[0].field_key == "registration_certificate"
+    assert response.debug.data_acquisition.field_traces[0].field_key == "registration_materials"
+    assert response.debug.data_acquisition.field_traces[0].label == "已提交登记材料"

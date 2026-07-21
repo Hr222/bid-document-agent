@@ -12,7 +12,9 @@ from app.interfaces.http.schemas.policy_decision import (
     PolicyDecisionDataAcquisitionDebug,
     PolicyDecisionDataFieldTrace,
     PolicyDecisionDebugInfo,
+    PolicyDecisionRequest,
     PolicyDecisionRequirementStatus,
+    PolicyDecisionResponse,
 )
 from app.interfaces.http.schemas.policy_pipeline_common import (
     BlockSource,
@@ -98,6 +100,8 @@ __all__ = [
     "PolicyDecisionDataFieldTrace",
     "PolicyDecisionDebugInfo",
     "PolicyDecisionRequirementStatus",
+    "PolicyDecisionRequest",
+    "PolicyDecisionResponse",
     "PolicyDocumentOption",
     "PolicyDocumentOptionList",
     "PolicyPipelineRequest",

@@ -33,6 +33,8 @@ class ChecklistScenarioDefinition:
     policy_category: str | None
     requirements: tuple[ChecklistRequirementDefinition, ...]
     min_rule_match_count: int = 1
+    input_field_key: str = "submitted_materials"
+    input_field_label: str = "已提交材料列表"
 
 
 @dataclass(slots=True, frozen=True)

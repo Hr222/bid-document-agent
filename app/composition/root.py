@@ -61,7 +61,6 @@ from app.modules.online.application.rag_facade import RagApplicationFacade
 from app.modules.online.application.rule_retrieval import PolicyRuleRetrievalService
 from app.modules.online.domain.checklist import (
     CHECKLIST_SCENARIO_REGISTRY,
-    COURT_EVALUATION_MATERIALS_SCENARIO,
     ChecklistScenarioRegistry,
     RuleDrivenChecklistPolicy,
 )
@@ -183,7 +182,8 @@ class ApplicationContainer:
         if self._data_provider_registry is None:
             provider = InlineChecklistDataProvider()
             registry = ChecklistDataProviderRegistry(default_provider=provider)
-            registry.register(COURT_EVALUATION_MATERIALS_SCENARIO.scenario_code, provider)
+            for scenario in self.scenario_registry.list_all():
+                registry.register(scenario.scenario_code, provider)
             self._data_provider_registry = registry
         return self._data_provider_registry
 
@@ -199,7 +199,8 @@ class ApplicationContainer:
     def policy_data_acquisition_service(self) -> PolicyDataAcquisitionService:
         if self._data_acquisition_service is None:
             self._data_acquisition_service = PolicyDataAcquisitionService(
-                self.checklist_data_provider_registry()
+                self.checklist_data_provider_registry(),
+                scenario_registry=self.scenario_registry,
             )
         return self._data_acquisition_service
 

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from app.interfaces.http.schemas.policy_decision import (
-    PolicyDecisionChecklistRequest,
-    PolicyDecisionChecklistResponse,
     PolicyDecisionDataAcquisitionDebug,
     PolicyDecisionDataFieldTrace,
     PolicyDecisionDebugInfo,
+    PolicyDecisionRequest,
     PolicyDecisionRequirementStatus,
+    PolicyDecisionResponse,
 )
 from app.interfaces.http.schemas.retrieval import (
     AnswerCitation,
@@ -16,18 +16,23 @@ from app.interfaces.http.schemas.retrieval import (
 from app.modules.online.domain.decision_result import DecisionResult, DecisionReviewCommand
 
 
-def decision_command(request: PolicyDecisionChecklistRequest) -> DecisionReviewCommand:
+def decision_command(
+    request: PolicyDecisionRequest,
+    *,
+    scenario_code: str | None = None,
+) -> DecisionReviewCommand:
     return DecisionReviewCommand(
         submitted_materials=tuple(request.submitted_materials),
         top_k=request.top_k,
         document_id=request.document_id,
         include_history=request.include_history,
         submitted_materials_provided="submitted_materials" in request.model_fields_set,
+        scenario_code=scenario_code,
     )
 
 
-def decision_response(result: DecisionResult) -> PolicyDecisionChecklistResponse:
-    return PolicyDecisionChecklistResponse(
+def decision_response(result: DecisionResult) -> PolicyDecisionResponse:
+    return PolicyDecisionResponse(
         scenario_code=result.scenario_code,
         scenario_name=result.scenario_name,
         decision=result.decision,
