@@ -43,6 +43,8 @@ class KnowledgeRetrievalService:
                     policy_category=item.policy_category,
                     responsible_department=item.responsible_department,
                     version_label=item.version_label,
+                    source_path=item.source_path,
+                    file_name=item.file_name,
                     section_title=item.section_title,
                     section_path=item.section_path,
                     page_no=item.page_no,

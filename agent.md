@@ -68,7 +68,7 @@ app/
 - `online` 与 `ingestion` 不得互相直接依赖。
 - 前端只通过稳定 HTTP API 使用后端，不直接访问数据库、Repository 或内部领域对象。
 
-现有代码中的少量接口层到 Infrastructure 依赖已经记录为技术债。新增代码不得扩大这类依赖，具体治理安排见 `docs/架构技术债与下一阶段治理计划.md`。
+此前的接口层到 Infrastructure 依赖已经完成治理。新增代码不得重新引入这类依赖；依赖方向和边界以本文件、`ARCHITECTURE.md` 以及架构边界测试为准。
 
 ## 3. 当前阶段边界
 

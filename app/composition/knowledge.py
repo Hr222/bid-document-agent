@@ -8,6 +8,9 @@ from app.infrastructure.llm.embedding_client import GiteeEmbeddingClient
 from app.infrastructure.persistence.repositories.knowledge_publication_repository import (
     KnowledgePublicationRepository,
 )
+from app.infrastructure.persistence.repositories.knowledge_quality_audit_repository import (
+    KnowledgeQualityAuditRepository,
+)
 from app.infrastructure.persistence.repositories.knowledge_read_repository import (
     KnowledgeReadRepository,
 )
@@ -20,6 +23,7 @@ from app.infrastructure.persistence.repositories.policy_persistence_gateway impo
 from app.infrastructure.persistence.session import SessionLocal
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
+from app.modules.knowledge.application.quality_audit import KnowledgeQualityAuditService
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability
 from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 from app.modules.knowledge.retrieval import HybridRetrievalPipeline, KnowledgeRetrievalService
@@ -44,6 +48,19 @@ def build_read_repository(
 
 def build_write_repository(gateway: PolicyPersistenceGateway) -> KnowledgeWriteRepository:
     return KnowledgeWriteRepository(gateway)
+
+
+def build_quality_audit_service(session: Session) -> KnowledgeQualityAuditService:
+    """组装 E1/E2 只读知识库审计服务。"""
+
+    return KnowledgeQualityAuditService(KnowledgeQualityAuditRepository(session))
+
+
+def build_runtime_quality_audit_service() -> tuple[Session, KnowledgeQualityAuditService]:
+    """为审计脚本创建独立会话与只读审计服务。"""
+
+    session = SessionLocal()
+    return session, build_quality_audit_service(session)
 
 
 def build_write_capability(

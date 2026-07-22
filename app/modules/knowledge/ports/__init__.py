@@ -4,6 +4,11 @@ from app.modules.knowledge.ports.publication_port import (
     KnowledgePublicationPort,
     KnowledgePublicationRecord,
 )
+from app.modules.knowledge.ports.quality_audit import (
+    KnowledgeAuditIssue,
+    KnowledgeQualityAuditPort,
+    KnowledgeQualityAuditReport,
+)
 from app.modules.knowledge.ports.read_port import (
     KnowledgeDocument,
     KnowledgeQuery,
@@ -23,4 +28,7 @@ __all__ = [
     "KnowledgeSearchHit",
     "KnowledgeWritePort",
     "KnowledgeWriteResult",
+    "KnowledgeAuditIssue",
+    "KnowledgeQualityAuditPort",
+    "KnowledgeQualityAuditReport",
 ]

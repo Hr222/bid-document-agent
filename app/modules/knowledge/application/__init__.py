@@ -5,6 +5,7 @@ from app.modules.knowledge.application.publication_service import (
     KnowledgePublicationResult,
     KnowledgePublicationService,
 )
+from app.modules.knowledge.application.quality_audit import KnowledgeQualityAuditService
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability
 from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 
@@ -14,4 +15,5 @@ __all__ = [
     "KnowledgePublicationResult",
     "KnowledgePublicationService",
     "KnowledgeBaseWriteCapability",
+    "KnowledgeQualityAuditService",
 ]

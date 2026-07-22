@@ -47,6 +47,8 @@ def decision_response(result: DecisionResult) -> PolicyDecisionResponse:
                 section_title=item.section_title,
                 page_no=item.page_no,
                 quote=item.quote,
+                source_path=item.source_path,
+                file_name=item.file_name,
             )
             for item in result.citations
         ],

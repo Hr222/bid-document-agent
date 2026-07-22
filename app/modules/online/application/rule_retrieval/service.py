@@ -108,6 +108,8 @@ class PolicyRuleRetrievalService:
                 section_title=hit.section_title,
                 page_no=hit.page_no,
                 quote=hit.chunk_text[: settings.rag_max_context_chars_per_chunk],
+                source_path=hit.source_path,
+                file_name=hit.file_name,
             )
             for index, hit in enumerate(search_result.hits[: settings.rag_answer_top_k], start=1)
         )
@@ -152,6 +154,8 @@ class PolicyRuleRetrievalService:
                 policy_category=hit.policy_category,
                 responsible_department=hit.responsible_department,
                 version_label=hit.version_label,
+                source_path=getattr(hit, "source_path", None),
+                file_name=getattr(hit, "file_name", None),
                 section_title=hit.section_title,
                 section_path=getattr(hit, "section_path", None),
                 page_no=hit.page_no,

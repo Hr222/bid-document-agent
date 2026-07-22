@@ -31,6 +31,7 @@ Bid Document Agent 当前围绕三类核心能力建设：
 | Milestone D / D3：数据获取抽象 | 已完成 |
 | Milestone D / D4：结果生成链路 | 已完成 |
 | Milestone D / D5：PoC 验收与回归资产 | 已完成 |
+| Milestone E：知识库收尾 | 已完成 |
 
 当前项目处于：
 
@@ -243,6 +244,14 @@ cd frontend
 npm run build
 ```
 
+执行知识库只读审计：
+
+```bash
+python -m app.scripts.run_knowledge_base_audit
+```
+
+审计只读取数据库并输出资料、版本、解析状态和质量问题，不执行清理或改写。
+
 当前测试覆盖：
 
 - 架构依赖边界
@@ -278,14 +287,15 @@ npm run build
 | Milestone D / D1-D3 | 已完成 | 规则场景 PoC<br>规则获取抽象<br>数据获取抽象 |
 | Milestone D / D4 | 已完成 | 结果生成链路通用化<br>第二场景复用验证<br>保持规则、数据和结果之间的可解释性 |
 | Milestone D / D5 | 已完成 | 固定 PoC 样例<br>自动化回归与 API Smoke<br>架构边界治理<br>机测、人测和全量验证 |
+| Milestone E | 已完成 | 只读知识库审计<br>资料质量问题清单<br>检索与引用来源追溯<br>Phase 2 收尾 |
 | 多场景与 Agent 演进 | 后续规划 | 扩展第二类业务规则场景<br>接入真实业务数据 Provider<br>引入 LangChain / LangGraph 编排<br>支持更多 Agent 工具调用能力<br>扩展历史案例、模板和文档生成能力 |
 
 ## 相关文档
 
 - `ARCHITECTURE.md`：当前架构基准
 - `agent.md`：协作与工程开发约定
-- `docs/当前阶段与下一阶段计划.md`：整体阶段规划
-- `docs/第二阶段-MilestoneD工作计划.md`：当前 Milestone D 工作计划
+- `docs/当前阶段与下一阶段计划.md`：整体阶段规划与 Phase 3 交接边界
+- `docs/Phase3业务扩展风险与技术债参考.md`：Phase 3 扩展风险与技术债参考
 - `sql/README-policy-schema.md`：知识库表结构设计
 - `tools/ocr/README.md`：OCR 与样本分类工具说明
 

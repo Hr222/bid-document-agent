@@ -79,6 +79,8 @@ def _make_hit(chunk_text: str) -> RetrievalHit:
         chunk_text=chunk_text,
         score=1.0,
         rank=1,
+        source_path="D:/knowledge/court-policy.docx",
+        file_name="court-policy.docx",
         retrieval_source="hybrid",
         score_breakdown={"keyword": 1.0},
     )
@@ -110,6 +112,8 @@ def test_rule_retrieval_service_builds_rule_pack_for_registered_scenario() -> No
     assert rule_pack.is_sufficient is True
     assert rule_pack.insufficient_reason is None
     assert len(rule_pack.citations) == 1
+    assert rule_pack.citations[0].source_path == "D:/knowledge/court-policy.docx"
+    assert rule_pack.citations[0].file_name == "court-policy.docx"
 
 
 def test_rule_retrieval_service_returns_unified_insufficient_reason() -> None:

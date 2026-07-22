@@ -42,6 +42,8 @@ class RetrievalHit(BaseModel):
     chunk_text: str
     score: float
     rank: int
+    source_path: str | None = None
+    file_name: str | None = None
     retrieval_source: str = Field(description="命中结果来源，例如 vector / keyword / hybrid。")
     score_breakdown: dict[str, float] = Field(
         default_factory=dict,
@@ -103,6 +105,8 @@ class AnswerCitation(BaseModel):
     section_title: str | None = None
     page_no: int | None = None
     quote: str
+    source_path: str | None = None
+    file_name: str | None = None
 
 
 class RagAskResponse(BaseModel):

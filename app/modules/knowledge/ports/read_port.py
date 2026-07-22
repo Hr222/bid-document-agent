@@ -34,6 +34,8 @@ class KnowledgeSearchHit:
     score: float
     rank: int
     retrieval_source: str
+    source_path: str | None = None
+    file_name: str | None = None
     score_breakdown: dict[str, float] = field(default_factory=dict)
 
 

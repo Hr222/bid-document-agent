@@ -83,6 +83,8 @@ def ask_response(result: AnswerResult) -> RagAskResponse:
                 section_title=citation.section_title,
                 page_no=citation.page_no,
                 quote=citation.quote,
+                source_path=citation.source_path,
+                file_name=citation.file_name,
             )
             for citation in result.citations
         ],
@@ -107,6 +109,8 @@ def _hit_response(hit) -> RetrievalHit:  # noqa: ANN001
         chunk_text=hit.chunk_text,
         score=round(hit.score, 6),
         rank=hit.rank,
+        source_path=hit.source_path,
+        file_name=hit.file_name,
         retrieval_source=hit.retrieval_source,
         score_breakdown={key: round(value, 6) for key, value in hit.score_breakdown.items()},
     )

@@ -13,3 +13,5 @@ class AnswerCitationResult:
     section_title: str | None
     page_no: int | None
     quote: str
+    source_path: str | None = None
+    file_name: str | None = None

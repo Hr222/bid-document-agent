@@ -54,6 +54,8 @@ class RagAnswerGenerator:
                 section_title=hit.section_title,
                 page_no=hit.page_no,
                 quote=hit.chunk_text[: settings.rag_max_context_chars_per_chunk],
+                source_path=hit.source_path,
+                file_name=hit.file_name,
             )
             for index, hit in enumerate(context_hits, start=1)
         )

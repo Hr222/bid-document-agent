@@ -20,6 +20,8 @@ class RetrievedPolicyChunk:
     page_no: int | None
     chunk_text: str
     score: float
+    source_path: str | None = None
+    file_name: str | None = None
     retrieval_source: str = "vector"
     score_breakdown: dict[str, float] = field(default_factory=dict)
     debug_details: dict[str, str | int | float | bool | None] = field(default_factory=dict)

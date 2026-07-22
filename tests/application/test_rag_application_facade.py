@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.interfaces.http.assemblers.rag import search_response
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability
 from app.modules.knowledge.ports.read_port import (
     KnowledgeQueryResult,
@@ -28,6 +29,8 @@ def _make_hit() -> KnowledgeSearchHit:
         score=1.0,
         rank=1,
         retrieval_source="hybrid",
+        source_path="D:/knowledge/示例制度.docx",
+        file_name="示例制度.docx",
         score_breakdown={"keyword": 1.0},
     )
 
@@ -100,6 +103,15 @@ def test_facade_searches_before_generating_answer() -> None:
     assert answer_generator.call_count == 1
     assert response.answer == "这是回答。"
     assert response.knowledge is not None
+    assert response.hits[0].source_path == "D:/knowledge/示例制度.docx"
+    assert response.hits[0].file_name == "示例制度.docx"
+
+
+def test_search_response_exposes_source_trace_fields() -> None:
+    response = search_response(_make_result((_make_hit(),)))
+
+    assert response.hits[0].source_path == "D:/knowledge/示例制度.docx"
+    assert response.hits[0].file_name == "示例制度.docx"
 
 
 def test_facade_returns_insufficient_evidence_without_answer_generation() -> None:
