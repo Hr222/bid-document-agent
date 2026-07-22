@@ -1,8 +1,11 @@
 from app.composition import ApplicationContainer
+from app.infrastructure.llm.langchain_glm_adapter import LangChainGlmStructuredLlm
+from app.infrastructure.llm.openai_client_factory import OpenAICompatibleClientFactory
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
 from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.domain.checklist import COURT_EVALUATION_MATERIALS_SCENARIO
+from app.shared.config import Settings
 
 
 def test_application_container_registers_current_scenario_provider() -> None:
@@ -39,3 +42,45 @@ def test_application_container_composes_use_cases_at_module_boundaries() -> None
     assert isinstance(container.policy_candidate_scan_use_case(), PolicyCandidateScanUseCase)
     assert preview_use_case.pipeline.write_capability is None
     assert ingest_use_case.pipeline.write_capability is container.knowledge_write_capability()
+
+
+def test_application_container_accepts_tender_llm_test_double() -> None:
+    class FakeTenderLlm:
+        def invoke(self, request: object, output_schema: object) -> object:
+            return object()
+
+    fake_llm = FakeTenderLlm()
+    container = ApplicationContainer(session=object(), tender_structured_llm=fake_llm)
+
+    assert container.tender_structured_llm() is fake_llm
+
+
+def test_application_container_shares_openai_client_factory_with_rag() -> None:
+    factory = OpenAICompatibleClientFactory(
+        configuration=Settings(
+            zhipu_api_key="test-key",
+            zhipu_base_url="https://example.com/v1",
+            zhipu_chat_model="glm-test",
+        )
+    )
+    container = ApplicationContainer(session=object(), openai_client_factory=factory)
+
+    rag_service = container.rag_answer_service()
+
+    assert rag_service.client is factory.create_client()
+
+
+def test_application_container_shares_openai_client_factory_with_tender_agent() -> None:
+    factory = OpenAICompatibleClientFactory(
+        configuration=Settings(
+            zhipu_api_key="test-key",
+            zhipu_base_url="https://example.com/v1",
+            zhipu_chat_model="glm-test",
+        )
+    )
+    container = ApplicationContainer(session=object(), openai_client_factory=factory)
+
+    tender_llm = container.tender_structured_llm()
+
+    assert isinstance(tender_llm, LangChainGlmStructuredLlm)
+    assert tender_llm._chat_model.root_client is factory.create_client()

@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     zhipu_api_key: str | None = Field(default=None, alias="ZHIPU_API_KEY")
     zhipu_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
     zhipu_chat_model: str | None = "glm-4-flash"
+    zhipu_timeout_seconds: float = Field(default=60.0, gt=0, alias="ZHIPU_TIMEOUT_SECONDS")
+    zhipu_temperature: float = Field(default=0.0, ge=0, le=2, alias="ZHIPU_TEMPERATURE")
+    zhipu_max_tokens: int | None = Field(default=None, gt=0, alias="ZHIPU_MAX_TOKENS")
     ocr_max_pages_per_batch: int = 4
     ocr_image_max_side: int = 1800
     ocr_request_interval_seconds: float = 10.0

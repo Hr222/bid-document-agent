@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.composition.agent import build_tender_structured_llm
 from app.composition.ingestion import (
     build_ingestion_service,
     build_ingestion_use_case,
@@ -31,6 +32,7 @@ from app.infrastructure.filesystem.policy_file_service import PolicyFileService
 from app.infrastructure.filesystem.upload_service import PolicyUploadService
 from app.infrastructure.llm.embedding_client import GiteeEmbeddingClient
 from app.infrastructure.llm.llm_client import LazyRagAnswerGenerator, RagAnswerGenerator
+from app.infrastructure.llm.openai_client_factory import OpenAICompatibleClientFactory
 from app.infrastructure.ocr.tencent_ocr import PolicyOcrService
 from app.infrastructure.persistence.repositories.knowledge_read_repository import (
     KnowledgeReadRepository,
@@ -43,6 +45,7 @@ from app.infrastructure.persistence.repositories.policy_persistence_gateway impo
 )
 from app.infrastructure.persistence.session import SessionLocal
 from app.interfaces.agent import FunctionCallingAdapter
+from app.modules.agent.tender.ports.llm_port import StructuredLlmPort
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
 from app.modules.ingestion.pipeline import PolicyIngestionService
@@ -94,6 +97,8 @@ class ApplicationContainer:
         checklist_policy: RuleDrivenChecklistPolicy | None = None,
         data_provider_registry: ChecklistDataProviderRegistry | None = None,
         answer_service: RagAnswerGenerator | None = None,
+        tender_structured_llm: StructuredLlmPort | None = None,
+        openai_client_factory: OpenAICompatibleClientFactory | None = None,
     ) -> None:
         self.session = session
         self.scenario_registry = scenario_registry or ChecklistScenarioRegistry(
@@ -103,6 +108,8 @@ class ApplicationContainer:
         self.checklist_policy = checklist_policy or RuleDrivenChecklistPolicy()
         self._data_provider_registry = data_provider_registry
         self._answer_service = answer_service
+        self._tender_structured_llm = tender_structured_llm
+        self._openai_client_factory = openai_client_factory
         self._persistence_gateway: PolicyPersistenceGateway | None = None
         self._write_repository: KnowledgeWriteRepository | None = None
         self._write_capability: KnowledgeBaseWriteCapability | None = None
@@ -124,6 +131,22 @@ class ApplicationContainer:
         self._embedding_service: GiteeEmbeddingClient | None = None
         self._file_service: PolicyFileService | None = None
         self._ocr_service: PolicyOcrService | None = None
+
+    def tender_structured_llm(self) -> StructuredLlmPort:
+        """延迟组装招标书 Agent 使用的结构化 LLM 能力。"""
+
+        if self._tender_structured_llm is None:
+            self._tender_structured_llm = build_tender_structured_llm(
+                self.openai_client_factory()
+            )
+        return self._tender_structured_llm
+
+    def openai_client_factory(self) -> OpenAICompatibleClientFactory:
+        """返回供 RAG 和 Agent 共享的 OpenAI-compatible Client Factory。"""
+
+        if self._openai_client_factory is None:
+            self._openai_client_factory = OpenAICompatibleClientFactory()
+        return self._openai_client_factory
 
     def embedding_service(self) -> GiteeEmbeddingClient:
         if self._embedding_service is None:
@@ -172,7 +195,9 @@ class ApplicationContainer:
 
     def rag_answer_service(self) -> RagAnswerGenerator:
         if self._answer_service is None:
-            self._answer_service = RagAnswerGenerator()
+            self._answer_service = RagAnswerGenerator(
+                client_factory=self.openai_client_factory()
+            )
         return self._answer_service
 
     def rag_application_facade(self) -> RagApplicationFacade:

@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from openai import OpenAI
 
+from app.infrastructure.llm.openai_client_factory import OpenAICompatibleClientFactory
 from app.modules.knowledge.ports.read_port import KnowledgeSearchHit
 from app.modules.online.contracts import AnswerCitationResult, AnswerResult
 from app.shared.config import settings
@@ -15,21 +16,26 @@ INSUFFICIENT_EVIDENCE_ANSWER = "未在知识库中找到足够依据。"
 class RagAnswerGenerator:
     """基于知识证据生成内部回答结果的 LLM 技术适配器。"""
 
-    def __init__(self, client: OpenAI | None = None) -> None:
+    def __init__(
+        self,
+        client: OpenAI | None = None,
+        *,
+        client_factory: OpenAICompatibleClientFactory | None = None,
+    ) -> None:
         if client is not None:
             self.client = client
             self.model = settings.zhipu_chat_model
             return
 
-        if not settings.zhipu_api_key or not settings.zhipu_chat_model:
+        if not settings.zhipu_chat_model:
             raise ServiceNotConfiguredError(
-                "未配置 ZHIPU_API_KEY 或 ZHIPU_CHAT_MODEL，无法执行问答。"
+                "未配置 ZHIPU_CHAT_MODEL，无法执行问答。"
             )
 
-        self.client = OpenAI(
-            api_key=settings.zhipu_api_key,
-            base_url=settings.zhipu_base_url,
-        )
+        if client_factory is None:
+            raise RuntimeError("RAG LLM Adapter 必须由 Composition Root 注入 Client Factory。")
+        self._client_factory = client_factory
+        self.client = self._client_factory.create_client()
         self.model = settings.zhipu_chat_model
 
     def answer(self, *, query: str, hits: list[KnowledgeSearchHit]) -> AnswerResult:

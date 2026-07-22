@@ -106,7 +106,9 @@ def test_concrete_adapters_are_instantiated_only_in_composition() -> None:
         "KnowledgePublicationRepository",
         "KnowledgeReadRepository",
         "KnowledgeWriteRepository",
+        "LangChainGlmStructuredLlm",
         "LazyRagAnswerGenerator",
+        "OpenAICompatibleClientFactory",
         "PolicyFileService",
         "PolicyOcrService",
         "PolicyPersistenceGateway",
@@ -136,6 +138,7 @@ def test_all_domain_modules_do_not_depend_on_external_adapters() -> None:
         APP_ROOT / "modules" / "online" / "domain",
         APP_ROOT / "modules" / "knowledge" / "domain",
         APP_ROOT / "modules" / "ingestion" / "domain",
+        APP_ROOT / "modules" / "agent" / "tender" / "domain",
     )
 
     for domain_root in domain_roots:
@@ -159,6 +162,7 @@ def test_module_ports_do_not_depend_on_infrastructure() -> None:
         APP_ROOT / "modules" / "online" / "ports.py",
         APP_ROOT / "modules" / "ingestion" / "ports",
         APP_ROOT / "modules" / "knowledge" / "ports",
+        APP_ROOT / "modules" / "agent" / "tender" / "ports",
     ):
         if ports_root.is_dir():
             imported.update(_imported_modules(ports_root))
@@ -200,6 +204,7 @@ def test_targeted_architecture_packages_exist_and_old_packages_are_gone() -> Non
         APP_ROOT / "infrastructure" / "filesystem",
         APP_ROOT / "infrastructure" / "ocr",
         APP_ROOT / "composition" / "online.py",
+        APP_ROOT / "composition" / "agent.py",
         APP_ROOT / "composition" / "knowledge.py",
         APP_ROOT / "composition" / "ingestion.py",
         APP_ROOT / "composition" / "runtime.py",

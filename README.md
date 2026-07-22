@@ -295,6 +295,7 @@ python -m app.scripts.run_knowledge_base_audit
 - `ARCHITECTURE.md`：当前架构基准
 - `agent.md`：协作与工程开发约定
 - `docs/当前阶段与下一阶段计划.md`：整体阶段规划与 Phase 3 交接边界
+- `docs/第三阶段工作计划.md`：Phase 3 详细工作计划与验收标准
 - `docs/Phase3业务扩展风险与技术债参考.md`：Phase 3 扩展风险与技术债参考
 - `sql/README-policy-schema.md`：知识库表结构设计
 - `tools/ocr/README.md`：OCR 与样本分类工具说明

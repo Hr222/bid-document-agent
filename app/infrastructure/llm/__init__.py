@@ -1,13 +1,17 @@
 """LLM 与 Embedding 技术适配器。"""
 
+from app.infrastructure.llm.langchain_glm_adapter import LangChainGlmStructuredLlm
 from app.infrastructure.llm.llm_client import (
     INSUFFICIENT_EVIDENCE_ANSWER,
     LazyRagAnswerGenerator,
     RagAnswerGenerator,
 )
+from app.infrastructure.llm.openai_client_factory import OpenAICompatibleClientFactory
 
 __all__ = [
     "INSUFFICIENT_EVIDENCE_ANSWER",
     "LazyRagAnswerGenerator",
     "RagAnswerGenerator",
+    "LangChainGlmStructuredLlm",
+    "OpenAICompatibleClientFactory",
 ]
