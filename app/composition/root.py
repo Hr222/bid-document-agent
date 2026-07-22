@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -40,6 +41,7 @@ from app.infrastructure.persistence.repositories.knowledge_write_repository impo
 from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
     PolicyPersistenceGateway,
 )
+from app.infrastructure.persistence.session import SessionLocal
 from app.interfaces.agent import FunctionCallingAdapter
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
@@ -60,11 +62,21 @@ from app.modules.online.application.policy_decision import PolicyDecisionApplica
 from app.modules.online.application.rag_facade import RagApplicationFacade
 from app.modules.online.application.rule_retrieval import PolicyRuleRetrievalService
 from app.modules.online.domain.checklist import (
-    CHECKLIST_SCENARIO_REGISTRY,
+    COURT_EVALUATION_MATERIALS_SCENARIO,
     ChecklistScenarioRegistry,
     RuleDrivenChecklistPolicy,
 )
 from app.shared.config import settings
+
+
+def get_db_session() -> Generator[Session, None, None]:
+    """为 HTTP 依赖提供器提供数据库会话生命周期。"""
+
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 class ApplicationContainer:
@@ -84,7 +96,10 @@ class ApplicationContainer:
         answer_service: RagAnswerGenerator | None = None,
     ) -> None:
         self.session = session
-        self.scenario_registry = scenario_registry or CHECKLIST_SCENARIO_REGISTRY
+        self.scenario_registry = scenario_registry or ChecklistScenarioRegistry(
+            definitions=(COURT_EVALUATION_MATERIALS_SCENARIO,),
+            default_scenario_code=COURT_EVALUATION_MATERIALS_SCENARIO.scenario_code,
+        )
         self.checklist_policy = checklist_policy or RuleDrivenChecklistPolicy()
         self._data_provider_registry = data_provider_registry
         self._answer_service = answer_service

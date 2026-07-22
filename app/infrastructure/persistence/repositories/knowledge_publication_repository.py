@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.infrastructure.persistence.models import PolicyDocument, PolicyVersion
+from app.infrastructure.persistence.schema_health import translate_missing_kb_schema_errors
 from app.modules.knowledge.domain import KnowledgePublicationState
 from app.modules.knowledge.ports.publication_port import (
     KnowledgePublicationPort,
@@ -17,6 +18,7 @@ class KnowledgePublicationRepository(KnowledgePublicationPort):
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    @translate_missing_kb_schema_errors
     def activate_version(
         self,
         *,

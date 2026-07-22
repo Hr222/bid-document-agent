@@ -1,7 +1,9 @@
-"""数据获取层能力导出。
+"""Checklist 决策输入材料获取能力。
 
-这里负责承接“场景请求 -> 业务数据包”的中间层能力，
-为后续决策层与 Agent 桥接层提供稳定入口。
+本模块负责将请求体、表单或其他业务来源中的 Checklist 输入材料，
+转换为统一的 ChecklistDataPack，供 Online Decision 使用。
+
+本模块不负责知识库入库，也不负责 RAG 检索。
 """
 
 from app.modules.online.application.data_acquisition.contracts import (

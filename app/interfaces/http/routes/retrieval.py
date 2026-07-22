@@ -1,10 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.exc import ProgrammingError
 
-from app.infrastructure.persistence.schema_health import (
-    KB_SCHEMA_SETUP_GUIDE,
-    is_missing_kb_schema_error,
-)
 from app.interfaces.http.assemblers.rag import (
     ask_command,
     ask_response,
@@ -19,7 +14,11 @@ from app.interfaces.http.schemas import (
     RetrievalSearchResponse,
 )
 from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
-from app.shared.exceptions import ServiceNotConfiguredError, UpstreamServiceError
+from app.shared.exceptions import (
+    KnowledgeBaseSchemaUnavailableError,
+    ServiceNotConfiguredError,
+    UpstreamServiceError,
+)
 
 router = APIRouter()
 
@@ -32,10 +31,8 @@ async def search_knowledge_base(
     """通过在线 RAG 外观层执行知识库检索。"""
     try:
         return search_response(use_case.search(search_command(request)))
-    except ProgrammingError as exc:
-        if is_missing_kb_schema_error(exc):
-            raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
-        raise
+    except KnowledgeBaseSchemaUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except UpstreamServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except (RuntimeError, ValueError) as exc:
@@ -50,10 +47,8 @@ async def ask_knowledge_base(
     """通过在线 RAG 外观层执行先检索后问答的链路。"""
     try:
         return ask_response(use_case.execute(ask_command(request)))
-    except ProgrammingError as exc:
-        if is_missing_kb_schema_error(exc):
-            raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
-        raise
+    except KnowledgeBaseSchemaUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except UpstreamServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except ServiceNotConfiguredError as exc:

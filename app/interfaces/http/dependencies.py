@@ -1,30 +1,17 @@
-from collections.abc import Generator
-
 from fastapi import Depends
-from sqlalchemy.orm import Session
 
-from app.composition import ApplicationContainer
-from app.infrastructure.filesystem.upload_service import PolicyUploadService
-from app.infrastructure.persistence.session import SessionLocal
+from app.composition import ApplicationContainer, get_db_session
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
+from app.modules.ingestion.ports import UploadStoragePort
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
 from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.application.policy_decision import PolicyDecisionApplicationService
 
 
-def get_db_session() -> Generator[Session, None, None]:
-    """为每个请求提供一个数据库会话，并在结束后关闭。"""
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
 def get_application_container(
-    session: Session = Depends(get_db_session),
+    session=Depends(get_db_session),  # noqa: ANN001
 ) -> ApplicationContainer:
     """为需要数据库能力的请求提供统一装配容器。"""
     return ApplicationContainer(session)
@@ -72,7 +59,7 @@ def get_ingestion_use_case(
 
 def get_policy_upload_service(
     container: ApplicationContainer = Depends(get_stateless_application_container),
-) -> PolicyUploadService:
+) -> UploadStoragePort:
     """提供上传暂存服务。"""
     return container.policy_upload_service()
 

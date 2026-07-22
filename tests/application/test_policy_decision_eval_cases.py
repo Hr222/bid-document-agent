@@ -14,6 +14,10 @@ from app.interfaces.http.schemas import (
     RetrievalStageDebug,
 )
 from app.modules.online.application.decision import RuleDrivenChecklistDecisionService
+from app.modules.online.domain.checklist import (
+    COURT_EVALUATION_MATERIALS_SCENARIO,
+    ChecklistScenarioRegistry,
+)
 from app.modules.online.domain.decision_result import DecisionReviewCommand
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -80,7 +84,10 @@ class FixtureRetrievalService:
 @pytest.mark.parametrize("case", EVAL_CASES, ids=lambda case: case["case_id"])
 def test_policy_decision_fixture_case_matches_expected_result(case: dict[str, Any]) -> None:
     service = RuleDrivenChecklistDecisionService(
-        FixtureRetrievalService(case["retrieval_text"])
+        FixtureRetrievalService(case["retrieval_text"]),
+        scenario_registry=ChecklistScenarioRegistry(
+            definitions=(COURT_EVALUATION_MATERIALS_SCENARIO,)
+        ),
     )
 
     response = service.review(

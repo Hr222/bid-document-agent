@@ -1,11 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.exc import ProgrammingError
 
-from app.infrastructure.filesystem.upload_service import PolicyUploadService
-from app.infrastructure.persistence.schema_health import (
-    KB_SCHEMA_SETUP_GUIDE,
-    is_missing_kb_schema_error,
-)
 from app.interfaces.http.assemblers.policy_pipeline import pipeline_command, pipeline_response
 from app.interfaces.http.dependencies import (
     get_ingestion_preview_use_case,
@@ -18,6 +12,8 @@ from app.interfaces.http.schemas.policy_upload import (
     PolicyUploadPreviewResponse,
 )
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
+from app.modules.ingestion.ports import UploadStoragePort
+from app.shared.exceptions import KnowledgeBaseSchemaUnavailableError
 from app.shared.logging import get_logger
 
 router = APIRouter()
@@ -44,13 +40,9 @@ async def ingest_policy_pipeline(
     """执行完整流水线，并写入制度文档、版本、章节和切块。"""
     try:
         return pipeline_response(use_case.ingest(pipeline_command(request)))
-    except ProgrammingError as exc:
-        if is_missing_kb_schema_error(exc):
-            logger.exception(
-                "知识库表结构缺失，入库失败 path=%s", request.source_path
-            )
-            raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
-        raise
+    except KnowledgeBaseSchemaUnavailableError as exc:
+        logger.exception("知识库表结构缺失，入库失败 path=%s", request.source_path)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -61,7 +53,7 @@ async def preview_policy_pipeline_upload(
     policy_category: str = Form("管理制度"),
     responsible_department: str | None = Form(None),
     version_label: str | None = Form(None),
-    upload_service: PolicyUploadService = Depends(get_policy_upload_service),
+    upload_service: UploadStoragePort = Depends(get_policy_upload_service),
     use_case: IngestionUseCase = Depends(get_ingestion_preview_use_case),
 ) -> PolicyUploadPreviewResponse:
     """接收 multipart 文件，暂存后交给入库预览用例。"""
@@ -97,7 +89,7 @@ async def preview_policy_pipeline_upload(
 @router.post("/policy-pipeline/ingest-upload", response_model=PolicyPipelineResponse)
 async def ingest_policy_pipeline_upload(
     request: PolicyUploadIngestRequest,
-    upload_service: PolicyUploadService = Depends(get_policy_upload_service),
+    upload_service: UploadStoragePort = Depends(get_policy_upload_service),
     use_case: IngestionUseCase = Depends(get_ingestion_use_case),
 ) -> PolicyPipelineResponse:
     """根据暂存 ID 找回文件，入库成功后删除对应暂存目录。"""
@@ -118,13 +110,8 @@ async def ingest_policy_pipeline_upload(
         )
         upload_service.discard_upload(request.upload_id)
         return response
-    except ProgrammingError as exc:
-        if is_missing_kb_schema_error(exc):
-            logger.exception(
-                "知识库表结构缺失，上传入库失败 upload_id=%s",
-                request.upload_id,
-            )
-            raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
-        raise
+    except KnowledgeBaseSchemaUnavailableError as exc:
+        logger.exception("知识库表结构缺失，上传入库失败 upload_id=%s", request.upload_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

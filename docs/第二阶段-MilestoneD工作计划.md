@@ -87,7 +87,8 @@
   - `app/modules/ingestion/domain/policies.py`
   - `app/modules/knowledge/retrieval/policies.py`
 - 当前已经有一版最小规则驱动清单校验能力：
-  - `app/modules/online/domain/checklist/definitions.py`
+  - `app/modules/online/domain/checklist/definitions.py`：通用清单定义与匹配策略
+  - `app/modules/online/domain/checklist/scenarios/`：具体业务场景定义
 - 当前已经有一版 PoC 级 decision service / schema：
   - `app/modules/online/application/decision/service.py`
   - `app/interfaces/http/schemas/policy_decision.py`
@@ -99,7 +100,7 @@
 - 当前 D3 已补出首版 `DataPack`、数据获取 service 与来源 trace，但仍只完成 inline provider 落地
 - 当前结构化结果已经有首版 schema，但还只覆盖一个审核场景，尚未形成更通用的 decision contract
 - 当前 PoC 还集中在“申请材料核验”这一个场景，后续还要验证第二类规则问题能否沿用同一套路
-- 当前 D5 已补齐固定 PoC 样例、应用层回归测试和 HTTP Smoke 测试，全量后端测试为 `74 passed`
+- 当前 D5 已补齐固定 PoC 样例、应用层回归测试和 HTTP Smoke 测试，全量后端测试为 `82 passed`
 - D 阶段仍明确保留 inline provider、单一生产场景和轻量规则表达能力，这些不阻塞 D5 收口
 - Milestone E 不再以历史案例库、模板库或标书生成能力为目标
 
@@ -283,18 +284,19 @@
 
 当前状态：
 
-- **代码与自动化测试已完成，等待项目负责人机测和人测确认**
+- **D5 代码、自动化测试、机测和人测均已完成，Milestone D 正式收口**
 - 已覆盖规则不足、输入不足、判断通过、判断失败，以及第二场景复用等回归 case
 - 已补齐固定 PoC 样例文件、fixture 驱动应用层回归测试和 HTTP API Smoke 测试
-- 已完成数据库可用条件下的全量回归：`python -m pytest -q`，共 `74 passed`
+- 已完成数据库可用条件下的全量回归：`python -m pytest -q`，共 `82 passed`
 - 代码检查与编译检查已通过：`ruff check app tests`、`python -m compileall -q app tests`
-- 等待项目负责人完成机测和人测，通过后 D5 即视为验收完成
+- 已完成前端生产构建：`npm.cmd run build`
+- 已完成 HTTP / Application / Ports 边界治理，并补充 AST 架构回归测试
 
 D5 完成门槛调整为：
 
 - 固定 PoC 样例和自动化回归测试已补齐
 - 全量 `pytest` 通过
-- 机测和人测由项目负责人执行并确认，通过后视为 D5 验收完成
+- 机测和人测已由项目负责人执行并确认，D5 验收完成
 - 不再要求单独新增阶段验收记录文档
 
 如果条件允许，后续可以继续增加：
@@ -406,4 +408,4 @@ Milestone E 完成后，Agent Phase 2 结束。第二阶段最终沉淀的是：
 
 如果继续开发时只看一句话，请记住：
 
-**Milestone D 在 D5 机测和人测通过后收口，Milestone E 作为 Phase 2 最后一步，只负责把现有资料收尾为干净、可查、可追溯的可靠知识底座。**
+**Milestone D 已在 D5 机测和人测通过后收口，架构技术债也已完成治理；按总阶段计划，下一步进入 Agent Phase 3 的招标书驱动应用建设。**

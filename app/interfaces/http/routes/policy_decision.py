@@ -1,10 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.exc import ProgrammingError
 
-from app.infrastructure.persistence.schema_health import (
-    KB_SCHEMA_SETUP_GUIDE,
-    is_missing_kb_schema_error,
-)
 from app.interfaces.http.assemblers.policy_decision import decision_command, decision_response
 from app.interfaces.http.dependencies import get_policy_decision_application_service
 from app.interfaces.http.schemas.policy_decision import (
@@ -12,7 +7,7 @@ from app.interfaces.http.schemas.policy_decision import (
     PolicyDecisionResponse,
 )
 from app.modules.online.application.policy_decision import PolicyDecisionApplicationService
-from app.shared.exceptions import UpstreamServiceError
+from app.shared.exceptions import KnowledgeBaseSchemaUnavailableError, UpstreamServiceError
 
 router = APIRouter()
 
@@ -53,10 +48,8 @@ async def _review_policy_decision(
         return decision_response(
             service.review(decision_command(request, scenario_code=scenario_code))
         )
-    except ProgrammingError as exc:
-        if is_missing_kb_schema_error(exc):
-            raise HTTPException(status_code=503, detail=KB_SCHEMA_SETUP_GUIDE) from exc
-        raise
+    except KnowledgeBaseSchemaUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except UpstreamServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except (RuntimeError, ValueError) as exc:

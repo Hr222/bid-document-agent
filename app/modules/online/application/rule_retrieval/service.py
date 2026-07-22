@@ -15,7 +15,6 @@ from app.modules.online.application.rule_retrieval.contracts import (
 from app.modules.online.application.rule_retrieval.models import RulePack
 from app.modules.online.contracts import AnswerCitationResult
 from app.modules.online.domain.checklist import (
-    CHECKLIST_SCENARIO_REGISTRY,
     ChecklistScenarioDefinition,
     ChecklistScenarioRegistry,
     RuleDrivenChecklistPolicy,
@@ -30,27 +29,35 @@ class PolicyRuleRetrievalService:
         self,
         retrieval_service: RetrievalSearcher,
         *,
-        scenario_registry: ChecklistScenarioRegistry | None = None,
+        scenario_registry: ChecklistScenarioRegistry,
         checklist_policy: RuleDrivenChecklistPolicy | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service
-        self.scenario_registry = scenario_registry or CHECKLIST_SCENARIO_REGISTRY
+        self.scenario_registry = scenario_registry
         self.checklist_policy = checklist_policy or RuleDrivenChecklistPolicy()
 
     def retrieve_rule_pack(self, request: RuleRetrievalRequest) -> RulePack:
         scenario = self.scenario_registry.get(request.scenario_code)
+
+        # 先由场景定义提供检索语义，再调用 Knowledge 层获取原始规则证据。
         raw_result = self.retrieval_service.search(
             self._build_search_request(request=request, scenario=scenario)
         )
+
+        # 统一不同检索实现的返回结构，后续逻辑只处理 KnowledgeQueryResult。
         search_result = self._normalize_search_result(
             raw_result,
             request=request,
             scenario=scenario,
         )
+
+        # Checklist Policy 只负责把命中的规则文本映射为场景要求，不负责执行检索。
         checklist_rule_pack = self.checklist_policy.build_rule_pack(
             scenario=scenario,
             rule_texts=[hit.chunk_text for hit in search_result.hits],
         )
+
+        # 规则命中数量不足时，保留统一原因，供决策层返回“证据不足”。
         insufficient_reason = self._build_insufficient_reason(
             hits=search_result.hits,
             matched_requirement_count=checklist_rule_pack.matched_requirement_count,
@@ -77,6 +84,7 @@ class PolicyRuleRetrievalService:
         request: RuleRetrievalRequest,
         scenario: ChecklistScenarioDefinition,
     ) -> KnowledgeQuery:
+        """把场景定义转换为 Knowledge Query，不在这里拼接具体数据库条件。"""
         return KnowledgeQuery(
             query=scenario.retrieval_query,
             top_k=request.top_k,
@@ -89,6 +97,7 @@ class PolicyRuleRetrievalService:
         self,
         search_result: KnowledgeQueryResult,
     ) -> tuple[AnswerCitationResult, ...]:
+        """把检索命中转换为可回溯的文档、章节、页码和原文引用。"""
         return tuple(
             AnswerCitationResult(
                 ref_no=index,
@@ -110,6 +119,7 @@ class PolicyRuleRetrievalService:
         matched_requirement_count: int,
         min_rule_match_count: int,
     ) -> str | None:
+        """统一判断没有命中规则或规则清单不完整的情况。"""
         hit_list = list(hits)
         if not hit_list:
             return "当前未检索到可用于该场景判断的规则片段。"
@@ -128,6 +138,7 @@ class PolicyRuleRetrievalService:
         request: RuleRetrievalRequest,
         scenario: ChecklistScenarioDefinition,
     ) -> KnowledgeQueryResult:
+        """兼容旧返回对象和标准查询结果，避免兼容逻辑扩散到决策流程。"""
         if isinstance(result, KnowledgeQueryResult):
             return result
 

@@ -19,6 +19,31 @@ def _imported_modules(path: Path) -> set[str]:
     return modules
 
 
+def _production_sources_outside_composition() -> list[Path]:
+    return [
+        source_path
+        for source_path in APP_ROOT.rglob("*.py")
+        if "infrastructure" not in source_path.parts
+        and "composition" not in source_path.parts
+    ]
+
+
+def _called_class_names(path: Path) -> set[str]:
+    names: set[str] = set()
+    source_paths = [path] if path.is_file() else list(path.rglob("*.py"))
+    for source_path in source_paths:
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if isinstance(function, ast.Name):
+                names.add(function.id)
+            elif isinstance(function, ast.Attribute):
+                names.add(function.attr)
+    return names
+
+
 def test_ingestion_and_knowledge_do_not_depend_on_online_module() -> None:
     assert not any(
         module.startswith("app.modules.online")
@@ -56,6 +81,101 @@ def test_http_schemas_do_not_reuse_ingestion_contracts() -> None:
     )
 
 
+def test_http_interfaces_do_not_depend_on_infrastructure() -> None:
+    imported = _imported_modules(APP_ROOT / "interfaces" / "http")
+
+    assert not any(module.startswith("app.infrastructure") for module in imported)
+
+
+def test_production_entrypoints_do_not_depend_on_infrastructure() -> None:
+    imported: set[str] = set()
+    for source_path in _production_sources_outside_composition():
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module)
+
+    assert not any(module.startswith("app.infrastructure") for module in imported)
+
+
+def test_concrete_adapters_are_instantiated_only_in_composition() -> None:
+    forbidden_adapter_names = {
+        "GiteeEmbeddingClient",
+        "KnowledgePublicationRepository",
+        "KnowledgeReadRepository",
+        "KnowledgeWriteRepository",
+        "LazyRagAnswerGenerator",
+        "PolicyFileService",
+        "PolicyOcrService",
+        "PolicyPersistenceGateway",
+        "PolicyUploadService",
+        "RagAnswerGenerator",
+        "SessionLocal",
+    }
+
+    for source_path in _production_sources_outside_composition():
+        assert not (_called_class_names(source_path) & forbidden_adapter_names), (
+            f"具体适配器不得在 Composition Root 外实例化：{source_path}"
+        )
+
+    assert _called_class_names(APP_ROOT / "composition") & forbidden_adapter_names
+
+
+def test_all_domain_modules_do_not_depend_on_external_adapters() -> None:
+    forbidden_prefixes = (
+        "app.infrastructure",
+        "app.interfaces",
+        "fastapi",
+        "sqlalchemy",
+        "langchain",
+        "langgraph",
+    )
+    domain_roots = (
+        APP_ROOT / "modules" / "online" / "domain",
+        APP_ROOT / "modules" / "knowledge" / "domain",
+        APP_ROOT / "modules" / "ingestion" / "domain",
+    )
+
+    for domain_root in domain_roots:
+        imported = _imported_modules(domain_root)
+        assert not any(
+            module.startswith(forbidden)
+            for module in imported
+            for forbidden in forbidden_prefixes
+        ), f"Domain 不得依赖外部适配器：{domain_root}"
+
+
+def test_application_modules_do_not_depend_on_infrastructure() -> None:
+    imported = _imported_modules(APP_ROOT / "modules")
+
+    assert not any(module.startswith("app.infrastructure") for module in imported)
+
+
+def test_module_ports_do_not_depend_on_infrastructure() -> None:
+    imported: set[str] = set()
+    for ports_root in (
+        APP_ROOT / "modules" / "online" / "ports.py",
+        APP_ROOT / "modules" / "ingestion" / "ports",
+        APP_ROOT / "modules" / "knowledge" / "ports",
+    ):
+        if ports_root.is_dir():
+            imported.update(_imported_modules(ports_root))
+        else:
+            tree = ast.parse(ports_root.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported.update(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imported.add(node.module)
+
+    assert not any(
+        module.startswith("app.infrastructure")
+        for module in imported
+    )
+
+
 def test_http_ingestion_routes_use_application_use_cases() -> None:
     route_imports = _imported_modules(APP_ROOT / "interfaces" / "http" / "routes")
 
@@ -82,6 +202,7 @@ def test_targeted_architecture_packages_exist_and_old_packages_are_gone() -> Non
         APP_ROOT / "composition" / "online.py",
         APP_ROOT / "composition" / "knowledge.py",
         APP_ROOT / "composition" / "ingestion.py",
+        APP_ROOT / "composition" / "runtime.py",
     )
     assert all(path.exists() for path in expected_paths)
 

@@ -14,6 +14,7 @@ from app.modules.online.domain.decision_result import (
     DecisionRetrievalTrace,
     RequirementStatusResult,
 )
+from app.shared.exceptions import KnowledgeBaseSchemaUnavailableError
 
 
 class StubDecisionEngine:
@@ -129,5 +130,26 @@ def test_policy_decision_http_route_supports_scenario_code() -> None:
     assert response.status_code == 200
     assert response.json()["scenario_code"] == "company-registration-review"
     assert engine.commands[0].scenario_code == "company-registration-review"
+
+    application.dependency_overrides.clear()
+
+
+def test_policy_decision_http_maps_schema_unavailable_to_503() -> None:
+    class SchemaUnavailableEngine:
+        def review(self, command):  # noqa: ANN001
+            raise KnowledgeBaseSchemaUnavailableError("请先初始化知识库表结构。")
+
+    application = create_app()
+    application.dependency_overrides[get_policy_decision_application_service] = lambda: (
+        PolicyDecisionApplicationService(SchemaUnavailableEngine())
+    )
+
+    response = TestClient(application).post(
+        "/api/v1/kb/policy-decisions/court-evaluation-materials/review",
+        json={"submitted_materials": ["申请书"]},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "请先初始化知识库表结构。"
 
     application.dependency_overrides.clear()

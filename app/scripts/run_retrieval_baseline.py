@@ -8,16 +8,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
 
-from app.infrastructure.llm.embedding_client import GiteeEmbeddingClient
-from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
-    PolicyPersistenceGateway,
-)
-from app.infrastructure.persistence.session import SessionLocal
+from app.composition.knowledge import build_benchmark_retrieval_service
 from app.modules.knowledge.ports.read_port import KnowledgeQuery, KnowledgeQueryTrace
-from app.modules.knowledge.retrieval import HybridRetrievalPipeline, KnowledgeRetrievalService
+from app.modules.knowledge.retrieval import KnowledgeRetrievalService
 from app.modules.knowledge.retrieval.vector_search import (
     VectorSearchStrategyName,
-    build_vector_search_strategy,
 )
 
 DEFAULT_BENCHMARK_STRATEGIES: tuple[VectorSearchStrategyName, ...] = ("exact", "hnsw")
@@ -176,16 +171,9 @@ def load_eval_cases(eval_path: Path) -> list[EvalCaseDefinition]:
 def build_retrieval_service(
     strategy_name: VectorSearchStrategyName,
 ) -> tuple[object, KnowledgeRetrievalService]:
-    """为指定策略构造独立的检索服务，避免策略之间互相污染。"""
+    """通过 Composition Root 为指定策略构造独立检索服务。"""
 
-    session = SessionLocal()
-    repository = PolicyPersistenceGateway(session)
-    pipeline = HybridRetrievalPipeline(
-        repository=repository,
-        embedding_service=GiteeEmbeddingClient(),
-        vector_search_strategy=build_vector_search_strategy(strategy_name),
-    )
-    return session, KnowledgeRetrievalService(repository, pipeline=pipeline)
+    return build_benchmark_retrieval_service(strategy_name)
 
 
 def extract_vector_trace(

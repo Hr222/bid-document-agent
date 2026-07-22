@@ -85,8 +85,16 @@ def _make_hit(chunk_text: str) -> RetrievalHit:
     )
 
 
+def _scenario_registry() -> ChecklistScenarioRegistry:
+    """为测试显式组装当前场景，避免依赖生产环境全局注册表。"""
+    return ChecklistScenarioRegistry(definitions=(COURT_EVALUATION_MATERIALS_SCENARIO,))
+
+
 def test_rule_driven_checklist_reports_missing_materials() -> None:
-    service = RuleDrivenChecklistDecisionService(FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]))
+    service = RuleDrivenChecklistDecisionService(
+        FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]),
+        scenario_registry=_scenario_registry(),
+    )
 
     response = service.review(
         DecisionReviewCommand(
@@ -114,7 +122,10 @@ def test_rule_driven_checklist_reports_missing_materials() -> None:
 
 
 def test_rule_driven_checklist_passes_when_all_materials_exist() -> None:
-    service = RuleDrivenChecklistDecisionService(FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]))
+    service = RuleDrivenChecklistDecisionService(
+        FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]),
+        scenario_registry=_scenario_registry(),
+    )
 
     response = service.review(
         DecisionReviewCommand(
@@ -144,7 +155,8 @@ def test_rule_driven_checklist_passes_when_all_materials_exist() -> None:
 
 def test_rule_driven_checklist_returns_insufficient_evidence_for_partial_rule_text() -> None:
     service = RuleDrivenChecklistDecisionService(
-        FakeRetrievalService([_make_hit("申请参与委托评估的机构应提交资料，具体要求以法院通知为准。")])
+        FakeRetrievalService([_make_hit("申请参与委托评估的机构应提交资料，具体要求以法院通知为准。")]),
+        scenario_registry=_scenario_registry(),
     )
 
     response = service.review(
@@ -159,7 +171,10 @@ def test_rule_driven_checklist_returns_insufficient_evidence_for_partial_rule_te
 
 
 def test_rule_driven_checklist_returns_insufficient_evidence_for_missing_business_input() -> None:
-    service = RuleDrivenChecklistDecisionService(FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]))
+    service = RuleDrivenChecklistDecisionService(
+        FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]),
+        scenario_registry=_scenario_registry(),
+    )
 
     response = service.review(DecisionReviewCommand(submitted_materials_provided=False))
 
@@ -215,3 +230,21 @@ def test_rule_driven_checklist_reuses_the_same_chain_for_another_registered_scen
     assert response.requirement_statuses[0].field_key == "registration_certificate"
     assert response.debug.data_acquisition.field_traces[0].field_key == "registration_materials"
     assert response.debug.data_acquisition.field_traces[0].label == "已提交登记材料"
+
+
+def test_scenario_registry_accepts_arbitrary_registered_scenario() -> None:
+    definition = ChecklistScenarioDefinition(
+        scenario_code="custom-review",
+        scenario_name="自定义核验场景",
+        retrieval_query="自定义核验需要哪些资料",
+        policy_category=None,
+        requirements=(),
+    )
+    registry = ChecklistScenarioRegistry(
+        definitions=(definition,),
+        default_scenario_code=definition.scenario_code,
+    )
+
+    assert registry.get("custom-review") is definition
+    assert registry.default() is definition
+    assert registry.list_all() == (definition,)

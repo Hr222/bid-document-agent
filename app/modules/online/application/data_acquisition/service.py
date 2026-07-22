@@ -6,10 +6,7 @@ from app.modules.online.application.data_acquisition.contracts import (
 from app.modules.online.application.data_acquisition.models import ChecklistDataPack
 from app.modules.online.application.data_acquisition.providers import InlineChecklistDataProvider
 from app.modules.online.application.data_acquisition.registry import ChecklistDataProviderRegistry
-from app.modules.online.domain.checklist import (
-    CHECKLIST_SCENARIO_REGISTRY,
-    ChecklistScenarioRegistry,
-)
+from app.modules.online.domain.checklist import ChecklistScenarioRegistry
 
 
 class PolicyDataAcquisitionService:
@@ -22,9 +19,11 @@ class PolicyDataAcquisitionService:
         scenario_registry: ChecklistScenarioRegistry | None = None,
     ) -> None:
         if provider_registry is None:
+            if scenario_registry is None:
+                raise ValueError("未提供场景注册表，无法为数据 Provider 完成场景注册。")
             provider_registry = ChecklistDataProviderRegistry()
             default_provider = InlineChecklistDataProvider()
-            for scenario in (scenario_registry or CHECKLIST_SCENARIO_REGISTRY).list_all():
+            for scenario in scenario_registry.list_all():
                 provider_registry.register(scenario.scenario_code, default_provider)
         self.provider_registry = provider_registry
 

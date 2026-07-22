@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
     PolicyPersistenceGateway,
 )
+from app.infrastructure.persistence.schema_health import translate_missing_kb_schema_errors
 from app.modules.knowledge.ports.read_port import (
     KnowledgeDocument,
     KnowledgeQuery,
@@ -31,9 +32,11 @@ class KnowledgeReadRepository(KnowledgeReadPort):
             embedding_service=embedding_service,
         )
 
+    @translate_missing_kb_schema_errors
     def search(self, query: KnowledgeQuery) -> KnowledgeQueryResult:
         return self.retrieval_service.search(query)
 
+    @translate_missing_kb_schema_errors
     def list_documents(
         self,
         *,

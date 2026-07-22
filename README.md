@@ -30,11 +30,11 @@ Bid Document Agent 当前围绕三类核心能力建设：
 | Milestone D / D2：规则获取抽象 | 已完成 |
 | Milestone D / D3：数据获取抽象 | 已完成 |
 | Milestone D / D4：结果生成链路 | 已完成 |
-| Milestone D / D5：PoC 验收与回归资产 | 当前收口 |
+| Milestone D / D5：PoC 验收与回归资产 | 已完成 |
 
 当前项目处于：
 
-> Agent Phase 2 / Milestone D：规则获取 + 数据获取 + 结果生成 PoC
+> Agent Phase 3：招标书驱动的投标书应用
 
 当前重点仍是单场景、可解释、可验证的业务闭环，不追求一次性构建完整多场景 Agent。
 
@@ -277,7 +277,7 @@ npm run build
 | 架构边界建设 | 已完成 | Online / Knowledge / Ingestion 架构拆分<br>Repository 与 Ports 抽象 |
 | Milestone D / D1-D3 | 已完成 | 规则场景 PoC<br>规则获取抽象<br>数据获取抽象 |
 | Milestone D / D4 | 已完成 | 结果生成链路通用化<br>第二场景复用验证<br>保持规则、数据和结果之间的可解释性 |
-| Milestone D / D5 | 当前收口 | 固定 PoC 样例<br>自动化回归与 API Smoke<br>全量 pytest 通过后进行机测、人测验收 |
+| Milestone D / D5 | 已完成 | 固定 PoC 样例<br>自动化回归与 API Smoke<br>架构边界治理<br>机测、人测和全量验证 |
 | 多场景与 Agent 演进 | 后续规划 | 扩展第二类业务规则场景<br>接入真实业务数据 Provider<br>引入 LangChain / LangGraph 编排<br>支持更多 Agent 工具调用能力<br>扩展历史案例、模板和文档生成能力 |
 
 ## 相关文档

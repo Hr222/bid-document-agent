@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from functools import wraps
+from typing import ParamSpec, TypeVar
+
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
+
+from app.shared.exceptions import KnowledgeBaseSchemaUnavailableError
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 # 启动阶段要覆盖到当前入库链路真正依赖的全部核心表，
 # 避免应用启动正常、首次入库才因为缺表而失败。
@@ -37,6 +45,21 @@ def is_missing_kb_schema_error(exc: Exception) -> bool:
         ("undefinedtable" in message or "does not exist" in message)
         and "kb_policy_" in message
     )
+
+
+def translate_missing_kb_schema_errors(func):  # noqa: ANN001
+    """把数据库缺表错误转换为应用层可识别的异常。"""
+
+    @wraps(func)
+    def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return func(*args, **kwargs)
+        except SQLAlchemyError as exc:
+            if is_missing_kb_schema_error(exc):
+                raise KnowledgeBaseSchemaUnavailableError(KB_SCHEMA_SETUP_GUIDE) from exc
+            raise
+
+    return wrapped
 
 
 def safe_find_missing_kb_tables(engine: Engine) -> list[str] | None:

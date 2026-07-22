@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.infrastructure.llm.embedding_client import GiteeEmbeddingClient
 from app.infrastructure.persistence.repositories.knowledge_publication_repository import (
     KnowledgePublicationRepository,
 )
@@ -16,11 +17,17 @@ from app.infrastructure.persistence.repositories.knowledge_write_repository impo
 from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
     PolicyPersistenceGateway,
 )
+from app.infrastructure.persistence.session import SessionLocal
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability
 from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
+from app.modules.knowledge.retrieval import HybridRetrievalPipeline, KnowledgeRetrievalService
 from app.modules.knowledge.retrieval.contracts import QueryEmbeddingService
+from app.modules.knowledge.retrieval.vector_search import (
+    VectorSearchStrategyName,
+    build_vector_search_strategy,
+)
 
 
 def build_persistence_gateway(session: Session) -> PolicyPersistenceGateway:
@@ -57,3 +64,18 @@ def build_publication_service(session: Session) -> KnowledgePublicationService:
 
 def build_knowledge_base_service(read_repository: KnowledgeReadRepository) -> KnowledgeBaseService:
     return KnowledgeBaseService(read_port=read_repository)
+
+
+def build_benchmark_retrieval_service(
+    strategy_name: VectorSearchStrategyName,
+) -> tuple[Session, KnowledgeRetrievalService]:
+    """为评测脚本组装独立的检索服务和会话。"""
+
+    session = SessionLocal()
+    repository = PolicyPersistenceGateway(session)
+    pipeline = HybridRetrievalPipeline(
+        repository=repository,
+        embedding_service=GiteeEmbeddingClient(),
+        vector_search_strategy=build_vector_search_strategy(strategy_name),
+    )
+    return session, KnowledgeRetrievalService(repository, pipeline=pipeline)

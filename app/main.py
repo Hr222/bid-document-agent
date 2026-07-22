@@ -5,11 +5,7 @@ from time import perf_counter
 
 from fastapi import FastAPI, Request
 
-from app.infrastructure.persistence.schema_health import (
-    KB_SCHEMA_SETUP_GUIDE,
-    safe_find_missing_kb_tables,
-)
-from app.infrastructure.persistence.session import engine
+from app.composition.runtime import inspect_knowledge_base_schema
 from app.interfaces.http.router import api_router
 from app.shared.config import settings
 from app.shared.logging import configure_logging, get_logger
@@ -28,14 +24,15 @@ def create_app() -> FastAPI:
             settings.app_version,
             settings.log_level.upper(),
         )
-        missing_tables = safe_find_missing_kb_tables(engine)
+        schema_status = inspect_knowledge_base_schema()
+        missing_tables = schema_status.missing_tables
         if missing_tables is None:
             logger.warning("数据库不可用，已跳过知识库表结构检查。")
         elif missing_tables:
             logger.warning(
                 "知识库表结构未就绪 missing_tables=%s。%s",
                 ",".join(missing_tables),
-                KB_SCHEMA_SETUP_GUIDE,
+                schema_status.setup_guide,
             )
         else:
             logger.info("知识库表结构检查通过。")

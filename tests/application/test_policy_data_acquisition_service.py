@@ -7,10 +7,19 @@ from app.modules.online.application.data_acquisition import (
     InlineChecklistDataProvider,
     PolicyDataAcquisitionService,
 )
+from app.modules.online.domain.checklist import (
+    COURT_EVALUATION_MATERIALS_SCENARIO,
+    ChecklistScenarioRegistry,
+)
+
+
+def _scenario_registry() -> ChecklistScenarioRegistry:
+    """为数据获取测试显式提供场景定义。"""
+    return ChecklistScenarioRegistry(definitions=(COURT_EVALUATION_MATERIALS_SCENARIO,))
 
 
 def test_data_acquisition_service_deduplicates_inline_materials_and_builds_trace() -> None:
-    service = PolicyDataAcquisitionService()
+    service = PolicyDataAcquisitionService(scenario_registry=_scenario_registry())
 
     data_pack = service.acquire_checklist_data(
         ChecklistDataAcquisitionRequest(
@@ -29,7 +38,7 @@ def test_data_acquisition_service_deduplicates_inline_materials_and_builds_trace
 
 
 def test_data_acquisition_service_marks_missing_input_when_materials_not_provided() -> None:
-    service = PolicyDataAcquisitionService()
+    service = PolicyDataAcquisitionService(scenario_registry=_scenario_registry())
 
     data_pack = service.acquire_checklist_data(
         ChecklistDataAcquisitionRequest(

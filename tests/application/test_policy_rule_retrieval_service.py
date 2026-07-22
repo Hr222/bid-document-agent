@@ -11,7 +11,10 @@ from app.modules.online.application.rule_retrieval import (
     PolicyRuleRetrievalService,
     RuleRetrievalRequest,
 )
-from app.modules.online.domain.checklist import CHECKLIST_SCENARIO_REGISTRY
+from app.modules.online.domain.checklist import (
+    COURT_EVALUATION_MATERIALS_SCENARIO,
+    ChecklistScenarioRegistry,
+)
 
 RULE_CHUNK_TEXT = (
     "第十条 评估、拍卖机构自愿参与人民法院委托工作的，应在指定时间到人民法院申请登记，"
@@ -81,10 +84,15 @@ def _make_hit(chunk_text: str) -> RetrievalHit:
     )
 
 
+def _scenario_registry() -> ChecklistScenarioRegistry:
+    """为规则获取测试显式提供场景定义。"""
+    return ChecklistScenarioRegistry(definitions=(COURT_EVALUATION_MATERIALS_SCENARIO,))
+
+
 def test_rule_retrieval_service_builds_rule_pack_for_registered_scenario() -> None:
     service = PolicyRuleRetrievalService(
         FakeRetrievalService([_make_hit(RULE_CHUNK_TEXT)]),
-        scenario_registry=CHECKLIST_SCENARIO_REGISTRY,
+        scenario_registry=_scenario_registry(),
     )
 
     rule_pack = service.retrieve_rule_pack(
@@ -107,7 +115,7 @@ def test_rule_retrieval_service_builds_rule_pack_for_registered_scenario() -> No
 def test_rule_retrieval_service_returns_unified_insufficient_reason() -> None:
     service = PolicyRuleRetrievalService(
         FakeRetrievalService([_make_hit("申请参与委托评估的机构应提交资料，具体要求以法院通知为准。")]),
-        scenario_registry=CHECKLIST_SCENARIO_REGISTRY,
+        scenario_registry=_scenario_registry(),
     )
 
     rule_pack = service.retrieve_rule_pack(

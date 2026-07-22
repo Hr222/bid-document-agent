@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.infrastructure.persistence.repositories.policy_persistence_gateway import (
     PolicyPersistenceGateway,
 )
+from app.infrastructure.persistence.schema_health import translate_missing_kb_schema_errors
 from app.modules.knowledge.ports.write_port import KnowledgeWritePort, KnowledgeWriteResult
 
 
@@ -12,6 +13,7 @@ class KnowledgeWriteRepository(KnowledgeWritePort):
     def __init__(self, gateway: PolicyPersistenceGateway) -> None:
         self.gateway = gateway
 
+    @translate_missing_kb_schema_errors
     def save_document_version_blocks_sections_and_chunks(
         self,
         **kwargs: object,

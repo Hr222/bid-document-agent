@@ -255,3 +255,11 @@ flowchart LR
     Publish --> PublishRepo
     PublishRepo --> Store
 ```
+
+## Checklist 与 RAG 的架构对应
+
+Checklist 场景属于 `modules/online/domain/checklist`，负责场景定义、规则要求和输入材料核验；它不直接实现 RAG，也不直接访问数据库或具体 Repository。
+
+Checklist 通过 `modules/online/application/rule_retrieval` 调用 Knowledge Query Capability，使用 `modules/knowledge/retrieval` 提供的召回、融合、rerank 和来源追踪能力，得到规则证据包后再进行领域判断。
+
+具体场景的新增方式和各层职责见 `docs/Checklist场景与RAG检索扩展说明.md`。

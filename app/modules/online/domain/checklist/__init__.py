@@ -6,7 +6,6 @@
 """
 
 from app.modules.online.domain.checklist.definitions import (
-    COURT_EVALUATION_MATERIALS_SCENARIO,
     ChecklistEvaluationResult,
     ChecklistRequirementComponent,
     ChecklistRequirementDecision,
@@ -17,14 +16,13 @@ from app.modules.online.domain.checklist.definitions import (
     RuleDrivenChecklistPolicy,
 )
 from app.modules.online.domain.checklist.registry import (
-    CHECKLIST_SCENARIO_REGISTRY,
     ChecklistScenarioRegistry,
     ScenarioNotFoundError,
 )
+from app.modules.online.domain.checklist.scenarios import COURT_EVALUATION_MATERIALS_SCENARIO
 
 __all__ = [
     "COURT_EVALUATION_MATERIALS_SCENARIO",
-    "CHECKLIST_SCENARIO_REGISTRY",
     "ChecklistEvaluationResult",
     "ChecklistRequirementComponent",
     "ChecklistRequirementDecision",

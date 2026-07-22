@@ -3,11 +3,11 @@ from __future__ import annotations
 import re
 import shutil
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import BinaryIO
 
+from app.modules.ingestion.ports.upload_port import StagedUpload, UploadStoragePort
 from app.shared.config import settings
 
 SUPPORTED_UPLOAD_EXTENSIONS = {
@@ -27,15 +27,7 @@ _UPLOAD_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
 _COPY_CHUNK_SIZE_BYTES = 1024 * 1024
 
 
-@dataclass(slots=True)
-class StagedUpload:
-    upload_id: str
-    file_name: str
-    stored_path: str
-    size_bytes: int
-
-
-class PolicyUploadService:
+class PolicyUploadService(UploadStoragePort):
     """处理单文件预览 / 入库流程的上传暂存。"""
 
     def __init__(
