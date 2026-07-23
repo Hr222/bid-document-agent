@@ -296,6 +296,8 @@ python -m app.scripts.run_knowledge_base_audit
 - `agent.md`：协作与工程开发约定
 - `docs/当前阶段与下一阶段计划.md`：整体阶段规划与 Phase 3 交接边界
 - `docs/第三阶段工作计划.md`：Phase 3 详细工作计划与验收标准
+- `docs/第三阶段 - 前端改造工作.md`：Phase 3 前端知识库与 Tender Agent 改造计划和进度
+- `docs/第三阶段- 后端F1工作进度.md`：Phase 3 后端 F1 实现进度和验收证据
 - `docs/Phase3业务扩展风险与技术债参考.md`：Phase 3 扩展风险与技术债参考
 - `sql/README-policy-schema.md`：知识库表结构设计
 - `tools/ocr/README.md`：OCR 与样本分类工具说明
