@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Literal, Protocol
+
+KnowledgeRetrievalMode = Literal["exact", "hnsw", "hybrid"]
 
 
 @dataclass(slots=True, frozen=True)
@@ -14,6 +16,7 @@ class KnowledgeQuery:
     responsible_department: str | None = None
     document_id: int | None = None
     include_history: bool = False
+    retrieval_mode: KnowledgeRetrievalMode = "hybrid"
 
 
 @dataclass(slots=True, frozen=True)

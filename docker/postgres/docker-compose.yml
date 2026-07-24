@@ -1,10 +1,10 @@
 services:
   postgres:
     image: pgvector/pgvector:pg17
-    container_name: bid-document-agent-postgres
+    container_name: go-agent-system-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-bid_document_agent}
+      POSTGRES_DB: ${POSTGRES_DB:-go_agent_system}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
@@ -13,7 +13,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-bid_document_agent}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-go_agent_system}"]
       interval: 10s
       timeout: 5s
       retries: 5

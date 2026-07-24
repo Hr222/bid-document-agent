@@ -24,6 +24,7 @@ def search_command(request: RetrievalSearchRequest) -> AskKnowledgeCommand:
         responsible_department=request.responsible_department,
         document_id=request.document_id,
         include_history=request.include_history,
+        retrieval_mode=request.retrieval_mode,
     )
 
 
@@ -36,6 +37,7 @@ def ask_command(request: RagAskRequest) -> AskKnowledgeCommand:
         responsible_department=request.responsible_department,
         document_id=request.document_id,
         include_history=request.include_history,
+        retrieval_mode=request.retrieval_mode,
     )
 
 

@@ -2,7 +2,9 @@ from fastapi import APIRouter
 
 from app.interfaces.http.routes import (
     health,
+    ingestion_retry,
     knowledge_base,
+    knowledge_management,
     knowledge_publication,
     policy_decision,
     policy_ingestion,
@@ -13,6 +15,12 @@ from app.interfaces.http.routes import (
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(knowledge_base.router, prefix="/kb", tags=["knowledge-base"])
+api_router.include_router(
+    knowledge_management.router,
+    prefix="/kb",
+    tags=["knowledge-management"],
+)
+api_router.include_router(ingestion_retry.router, prefix="/kb", tags=["ingestion"])
 api_router.include_router(
     knowledge_publication.router,
     prefix="/kb",

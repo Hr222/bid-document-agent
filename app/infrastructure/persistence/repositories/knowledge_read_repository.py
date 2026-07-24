@@ -4,6 +4,13 @@ from app.infrastructure.persistence.repositories.policy_persistence_gateway impo
     PolicyPersistenceGateway,
 )
 from app.infrastructure.persistence.schema_health import translate_missing_kb_schema_errors
+from app.modules.knowledge.application.management_contracts import (
+    KnowledgeManagementDocumentDetail,
+    KnowledgeManagementDocumentPage,
+    KnowledgeManagementOverviewResult,
+    ListKnowledgeManagementDocumentsQuery,
+)
+from app.modules.knowledge.ports.management_read_port import KnowledgeManagementReadPort
 from app.modules.knowledge.ports.read_port import (
     KnowledgeDocument,
     KnowledgeQuery,
@@ -14,7 +21,7 @@ from app.modules.knowledge.retrieval import KnowledgeRetrievalService
 from app.modules.knowledge.retrieval.contracts import QueryEmbeddingService
 
 
-class KnowledgeReadRepository(KnowledgeReadPort):
+class KnowledgeReadRepository(KnowledgeReadPort, KnowledgeManagementReadPort):
     """PostgreSQL/pgvector 读仓储适配器。
 
     现阶段复用已经稳定的混合检索实现，外部只看到知识端口，不再直接拿到旧仓储。
@@ -59,3 +66,25 @@ class KnowledgeReadRepository(KnowledgeReadPort):
                 limit=limit,
             )
         ]
+
+    @translate_missing_kb_schema_errors
+    def get_overview(self) -> KnowledgeManagementOverviewResult:
+        return self.gateway.get_management_overview()
+
+    @translate_missing_kb_schema_errors
+    def list_management_categories(self) -> list[str]:
+        return self.gateway.list_management_categories()
+
+    @translate_missing_kb_schema_errors
+    def list_management_documents(
+        self,
+        query: ListKnowledgeManagementDocumentsQuery,
+    ) -> KnowledgeManagementDocumentPage:
+        return self.gateway.list_management_documents(query)
+
+    @translate_missing_kb_schema_errors
+    def get_document(
+        self,
+        document_id: int,
+    ) -> KnowledgeManagementDocumentDetail | None:
+        return self.gateway.get_management_document(document_id)

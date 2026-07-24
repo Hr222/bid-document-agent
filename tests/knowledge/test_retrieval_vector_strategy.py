@@ -20,6 +20,7 @@ class StubEmbeddingService:
 class TrackingRepository:
     def __init__(self) -> None:
         self.called_strategy: str | None = None
+        self.keyword_calls = 0
 
     def search_chunks_exact(self, **kwargs) -> list[RetrievedPolicyChunk]:
         self.called_strategy = "exact"
@@ -52,6 +53,7 @@ class TrackingRepository:
         return []
 
     def search_chunks_by_keywords(self, **kwargs) -> list[RetrievedPolicyChunk]:
+        self.keyword_calls += 1
         return []
 
 
@@ -110,3 +112,48 @@ def test_pipeline_uses_hnsw_vector_strategy_from_settings(monkeypatch) -> None:
     vector_trace = next(trace for trace in result.traces if trace.name == "vector_recall")
     assert vector_trace.source == "pgvector_hnsw"
     assert vector_trace.details["strategy"] == "hnsw"
+
+
+def test_pipeline_request_mode_selects_exact_vector_only() -> None:
+    repository = TrackingRepository()
+    pipeline = HybridRetrievalPipeline(
+        repository=repository,
+        embedding_service=StubEmbeddingService(),
+    )
+
+    result = pipeline.run(
+        RetrievalSearchRequest(
+            query="绀轰緥绠＄悊鍒跺害閫傜敤浜庡摢浜涜寖鍥?",
+            top_k=3,
+            retrieval_mode="exact",
+        )
+    )
+
+    assert repository.called_strategy == "exact"
+    assert repository.keyword_calls == 0
+    assert result.strategy == "exact-vector/exact"
+    assert next(trace for trace in result.traces if trace.name == "keyword_recall").source == (
+        "disabled_by_mode"
+    )
+
+
+def test_pipeline_request_mode_selects_hnsw_vector_only() -> None:
+    repository = TrackingRepository()
+    pipeline = HybridRetrievalPipeline(
+        repository=repository,
+        embedding_service=StubEmbeddingService(),
+    )
+
+    result = pipeline.run(
+        RetrievalSearchRequest(
+            query="绀轰緥绠＄悊鍒跺害閫傜敤浜庡摢浜涜寖鍥?",
+            top_k=3,
+            retrieval_mode="hnsw",
+        )
+    )
+
+    assert repository.called_strategy == "hnsw"
+    assert repository.keyword_calls == 0
+    assert result.strategy == "hnsw-vector/hnsw"
+    vector_trace = next(trace for trace in result.traces if trace.name == "vector_recall")
+    assert vector_trace.source == "pgvector_hnsw"

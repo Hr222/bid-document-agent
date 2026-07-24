@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import case, func, literal, select
+from sqlalchemy import case, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.infrastructure.persistence.models import (
@@ -18,6 +18,14 @@ from app.modules.ingestion.contracts import (
     ParsedBlock,
     RegisteredFileInfo,
     SectionSplitItem,
+)
+from app.modules.ingestion.ports.retry_port import IngestionRetrySource
+from app.modules.knowledge.application.management_contracts import (
+    KnowledgeManagementDocument,
+    KnowledgeManagementDocumentDetail,
+    KnowledgeManagementDocumentPage,
+    KnowledgeManagementOverviewResult,
+    ListKnowledgeManagementDocumentsQuery,
 )
 from app.modules.knowledge.retrieval.contracts import RetrievedPolicyChunk
 from app.shared.config import settings
@@ -42,6 +50,30 @@ class PolicyDocumentListItem:
     responsible_department: str | None
     latest_version_id: int | None
     latest_version_label: str | None
+
+
+def _resolve_management_status(
+    *,
+    document_status: str,
+    parser_status: str | None,
+) -> str:
+    if parser_status == "failed":
+        return "failed"
+    if parser_status in ("pending", "processing") or parser_status is None:
+        return "processing"
+    if parser_status == "parsed":
+        return "ready"
+    if document_status == "archived":
+        return "ready"
+    return "processing"
+
+
+def _resolve_management_progress(parser_status: str | None) -> int | None:
+    if parser_status == "parsed":
+        return 100
+    if parser_status == "failed":
+        return 0
+    return None
 
 
 class PolicyPersistenceGateway:
@@ -153,6 +185,244 @@ class PolicyPersistenceGateway:
             for row in rows
         ]
 
+    def get_management_overview(self) -> KnowledgeManagementOverviewResult:
+        """返回知识库管理页需要的聚合统计。"""
+
+        document_count = self.session.scalar(
+            select(func.count(PolicyDocument.id))
+        ) or 0
+        chunk_count = self.session.scalar(
+            select(func.count(PolicyChunk.id))
+        ) or 0
+        pending_count = self.session.scalar(
+            select(func.count(PolicyVersion.id)).where(
+                PolicyVersion.parser_status.in_(("pending", "processing"))
+            )
+        ) or 0
+        failed_count = self.session.scalar(
+            select(func.count(PolicyVersion.id)).where(
+                PolicyVersion.parser_status == "failed"
+            )
+        ) or 0
+        latest_updated_at = self.session.scalar(
+            select(func.max(PolicyDocument.updated_at))
+        )
+        return KnowledgeManagementOverviewResult(
+            document_count=int(document_count),
+            chunk_count=int(chunk_count),
+            pending_count=int(pending_count),
+            failed_count=int(failed_count),
+            latest_updated_at=latest_updated_at,
+        )
+
+    def list_management_categories(self) -> list[str]:
+        rows = self.session.execute(
+            select(PolicyDocument.policy_category)
+            .where(PolicyDocument.policy_category.is_not(None))
+            .distinct()
+            .order_by(PolicyDocument.policy_category.asc())
+        ).scalars().all()
+        return [category for category in rows if category]
+
+    def list_management_documents(
+        self,
+        query: ListKnowledgeManagementDocumentsQuery,
+    ) -> KnowledgeManagementDocumentPage:
+        """读取面向管理工作台的文档摘要。"""
+
+        chunk_counts = (
+            select(
+                PolicyChunk.version_id.label("version_id"),
+                func.count(PolicyChunk.id).label("chunk_count"),
+            )
+            .group_by(PolicyChunk.version_id)
+            .subquery()
+        )
+        section_counts = (
+            select(
+                PolicySection.version_id.label("version_id"),
+                func.count(PolicySection.id).label("section_count"),
+            )
+            .group_by(PolicySection.version_id)
+            .subquery()
+        )
+        filters = []
+        if query.policy_category:
+            filters.append(PolicyDocument.policy_category == query.policy_category)
+        if query.document_name and query.document_name.strip():
+            search = f"%{query.document_name.strip()}%"
+            filters.append(
+                PolicyDocument.policy_name.ilike(search)
+                | PolicyVersion.file_name.ilike(search)
+            )
+        if query.statuses:
+            status_filters = []
+            for status in query.statuses:
+                if status == "failed":
+                    status_filters.append(PolicyVersion.parser_status == "failed")
+                elif status == "processing":
+                    status_filters.append(
+                        (PolicyVersion.id.is_(None))
+                        | PolicyVersion.parser_status.in_(("pending", "processing"))
+                    )
+                elif status == "ready":
+                    status_filters.append(PolicyVersion.parser_status == "parsed")
+            if status_filters:
+                filters.append(or_(*status_filters))
+
+        count_statement = (
+            select(func.count(PolicyDocument.id))
+            .outerjoin(
+                PolicyVersion,
+                PolicyVersion.id == PolicyDocument.latest_version_id,
+            )
+        )
+        if filters:
+            count_statement = count_statement.where(*filters)
+        total_count = int(self.session.scalar(count_statement) or 0)
+
+        statement = (
+            select(
+                PolicyDocument,
+                PolicyVersion,
+                func.coalesce(chunk_counts.c.chunk_count, 0).label("chunk_count"),
+                func.coalesce(section_counts.c.section_count, 0).label("section_count"),
+            )
+            .outerjoin(
+                PolicyVersion,
+                PolicyVersion.id == PolicyDocument.latest_version_id,
+            )
+            .outerjoin(
+                chunk_counts,
+                chunk_counts.c.version_id == PolicyVersion.id,
+            )
+            .outerjoin(
+                section_counts,
+                section_counts.c.version_id == PolicyVersion.id,
+            )
+            .order_by(PolicyDocument.updated_at.desc(), PolicyDocument.id.desc())
+            .offset(query.offset)
+            .limit(query.limit)
+        )
+        if filters:
+            statement = statement.where(*filters)
+
+        rows = self.session.execute(statement).all()
+        return KnowledgeManagementDocumentPage(
+            items=[
+                self._management_document_from_row(
+                    document=document,
+                    version=version,
+                    chunk_count=int(chunk_count),
+                    section_count=int(section_count),
+                )
+                for document, version, chunk_count, section_count in rows
+            ],
+            total_count=total_count,
+        )
+
+    def get_management_document(
+        self,
+        document_id: int,
+    ) -> KnowledgeManagementDocumentDetail | None:
+        """读取管理工作台的文档详情摘要。"""
+
+        document = self.session.get(PolicyDocument, document_id)
+        if document is None:
+            return None
+
+        version = None
+        if document.latest_version_id is not None:
+            version = self.session.get(PolicyVersion, document.latest_version_id)
+
+        chunk_count = 0
+        section_count = 0
+        if version is not None:
+            chunk_count = int(
+                self.session.scalar(
+                    select(func.count(PolicyChunk.id)).where(
+                        PolicyChunk.version_id == version.id
+                    )
+                )
+                or 0
+            )
+            section_count = int(
+                self.session.scalar(
+                    select(func.count(PolicySection.id)).where(
+                        PolicySection.version_id == version.id
+                    )
+                )
+                or 0
+            )
+
+        summary = self._management_document_from_row(
+            document=document,
+            version=version,
+            chunk_count=chunk_count,
+            section_count=section_count,
+        )
+        summary_values = {
+            field: getattr(summary, field)
+            for field in summary.__dataclass_fields__
+        }
+        return KnowledgeManagementDocumentDetail(
+            **summary_values,
+            source_path=version.source_path if version is not None else None,
+            page_count=version.page_count if version is not None else None,
+            parse_method=version.parse_method if version is not None else None,
+            is_scanned=version.is_scanned if version is not None else None,
+            created_at=document.created_at,
+        )
+
+    def get_retry_source(self, document_id: int) -> IngestionRetrySource | None:
+        document = self.session.get(PolicyDocument, document_id)
+        if document is None or document.latest_version_id is None:
+            return None
+
+        version = self.session.get(PolicyVersion, document.latest_version_id)
+        if version is None or not version.source_path:
+            return None
+
+        return IngestionRetrySource(
+            source_path=version.source_path,
+            policy_category=document.policy_category,
+            responsible_department=document.responsible_department,
+            version_label=version.version_label,
+            target_document_id=document.id,
+        )
+
+    @staticmethod
+    def _management_document_from_row(
+        *,
+        document: PolicyDocument,
+        version: PolicyVersion | None,
+        chunk_count: int,
+        section_count: int,
+    ) -> KnowledgeManagementDocument:
+        parser_status = version.parser_status if version is not None else None
+        return KnowledgeManagementDocument(
+            document_id=document.id,
+            policy_name=document.policy_name,
+            policy_category=document.policy_category,
+            responsible_department=document.responsible_department,
+            file_name=version.file_name if version is not None else None,
+            file_type=version.file_ext if version is not None else None,
+            file_size_bytes=None,
+            version_id=version.id if version is not None else None,
+            version_label=version.version_label if version is not None else None,
+            processing_status=_resolve_management_status(
+                document_status=document.status,
+                parser_status=parser_status,
+            ),
+            processing_progress=_resolve_management_progress(parser_status),
+            publication_status=version.version_status if version is not None else None,
+            parser_status=parser_status,
+            section_count=section_count,
+            chunk_count=chunk_count,
+            updated_at=(version.updated_at if version is not None else document.updated_at),
+            updated_by=None,
+            error_message=None,
+        )
     def search_chunks(
         self,
         *,

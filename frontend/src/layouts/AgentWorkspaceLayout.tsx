@@ -1,4 +1,4 @@
-import { Bell, Bot, ChevronDown, FileText, GitBranch, Home, Library, Settings, Sparkles } from "lucide-react";
+import { Bell, Bot, ChevronDown, FileText, GitBranch, Home, Library, MessageSquare, Settings, Sparkles } from "lucide-react";
 import { Avatar, Badge, Breadcrumb, Input, Layout, Menu, type MenuProps } from "antd";
 import { useMemo } from "react";
 import { useLocation, useNavigate, Outlet } from "react-router-dom";
@@ -9,6 +9,7 @@ const { Header, Sider, Content } = Layout;
 
 const menuItems: MenuProps["items"] = [
   { key: "/dashboard", icon: <Home size={17} />, label: "控制台" },
+  { key: "/chat", icon: <MessageSquare size={17} />, label: "对话" },
   { key: "/agents", icon: <Bot size={17} />, label: "智能体" },
   { key: "/workflow", icon: <GitBranch size={17} />, label: "工作流" },
   { key: "/knowledge-bases", icon: <Library size={17} />, label: "知识库" },
@@ -47,7 +48,7 @@ export function AgentWorkspaceLayout() {
         <Menu className={styles.menu} theme="dark" mode="inline" selectedKeys={selectedKey ? [selectedKey] : []} items={menuItems} onClick={handleMenuClick} />
         <div className={styles.siderBottom}>
           <div className={styles.sectionLabel}>平台</div>
-          <Menu className={styles.menu} theme="dark" mode="inline" selectedKeys={[]} items={platformItems} onClick={() => undefined} />
+          <Menu className={styles.menu} theme="dark" mode="inline" selectedKeys={[]} items={platformItems} onClick={handleMenuClick} />
           <div className={styles.profile}>
             <Avatar className={styles.avatar}>陈</Avatar>
             <div className={styles.profileCopy}><strong>陈先生</strong><span>项目负责人</span></div>
@@ -57,7 +58,7 @@ export function AgentWorkspaceLayout() {
       </Sider>
       <Layout className={styles.contentLayout}>
         <Header className={styles.header}>
-          <Breadcrumb className={styles.breadcrumb} items={[{ title: "工作区" }, { title: "知识库" }]} />
+          <Breadcrumb className={styles.breadcrumb} items={[{ title: "工作区" }, { title: getBreadcrumbTitle(location.pathname) }]} />
           <div className={styles.headerActions}>
             <Input className={styles.globalSearch} prefix={<FileText size={14} color="#98a3b6" />} placeholder="搜索文档、智能体或任务..." />
             <Badge dot><Bell size={17} color="#78869c" /></Badge>
@@ -69,4 +70,14 @@ export function AgentWorkspaceLayout() {
       </Layout>
     </Layout>
   );
+}
+
+function getBreadcrumbTitle(pathname: string) {
+  if (pathname.startsWith("/chat")) return "对话";
+  if (pathname.startsWith("/agents")) return pathname.includes("/tasks/") ? "Tender 任务" : "智能体";
+  if (pathname.startsWith("/workflow")) return "工作流";
+  if (pathname.startsWith("/knowledge-bases")) return "知识库";
+  if (pathname.startsWith("/docs")) return "文档中心";
+  if (pathname.startsWith("/settings")) return "系统设置";
+  return "控制台";
 }

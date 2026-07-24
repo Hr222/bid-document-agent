@@ -2,9 +2,11 @@ from fastapi import Depends
 
 from app.composition import ApplicationContainer, get_db_session
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
+from app.modules.ingestion.application.retry_ingestion import RetryIngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
 from app.modules.ingestion.ports import UploadStoragePort
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
+from app.modules.knowledge.application.management_service import KnowledgeManagementService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
 from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.application.policy_decision import PolicyDecisionApplicationService
@@ -57,6 +59,13 @@ def get_ingestion_use_case(
     return container.ingestion_use_case()
 
 
+def get_retry_ingestion_use_case(
+    container: ApplicationContainer = Depends(get_application_container),
+) -> RetryIngestionUseCase:
+    """提供文档入库重试用例。"""
+    return container.retry_ingestion_use_case()
+
+
 def get_policy_upload_service(
     container: ApplicationContainer = Depends(get_stateless_application_container),
 ) -> UploadStoragePort:
@@ -76,3 +85,10 @@ def get_knowledge_base_service(
 ) -> KnowledgeBaseService:
     """提供知识库轻量管理服务。"""
     return container.knowledge_base_service()
+
+
+def get_knowledge_management_service(
+    container: ApplicationContainer = Depends(get_application_container),
+) -> KnowledgeManagementService:
+    """提供知识库管理读模型应用服务。"""
+    return container.knowledge_management_service()

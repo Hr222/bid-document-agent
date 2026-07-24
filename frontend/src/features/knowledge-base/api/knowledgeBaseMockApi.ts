@@ -2,8 +2,11 @@ import { z } from "zod";
 
 import type {
   KnowledgeBaseOverview,
+  KnowledgeDocumentPage,
+  KnowledgeIngestResult,
   KnowledgeDocument,
   KnowledgeSearchResponse,
+  KnowledgeUploadPreview,
   ListKnowledgeDocumentsParams,
   UploadDocumentRequest,
 } from "../types";
@@ -65,6 +68,8 @@ let documents: KnowledgeDocument[] = [
   { id: 106, name: "外部合作机构管理细则.pdf", type: "PDF", size: "3.4 MB", category: "合作管理", version: "v2.0", status: "ready", chunks: 974, updatedAt: "07 月 18 日", updatedBy: "林晓" },
 ];
 
+const pendingUploads = new Map<string, UploadDocumentRequest>();
+
 function wait<T>(value: T, delay = 180): Promise<T> {
   return new Promise((resolve) => window.setTimeout(() => resolve(value), delay));
 }
@@ -89,14 +94,63 @@ export const knowledgeBaseMockApi = {
   async listDocuments(params: ListKnowledgeDocumentsParams): Promise<KnowledgeDocument[]> {
     const keyword = params.search?.trim().toLowerCase() ?? "";
     const filtered = documents.filter((document) => {
-      const matchesKeyword = !keyword || [document.name, document.category, document.version].join(" ").toLowerCase().includes(keyword);
-      const matchesStatus = !params.status || params.status === "all" || document.status === params.status;
-      return matchesKeyword && matchesStatus;
+      const matchesKeyword = !keyword || document.name.toLowerCase().includes(keyword);
+      const matchesStatus = !params.statuses?.length || params.statuses.includes(document.status);
+      const matchesCategory = !params.category || document.category === params.category;
+      return matchesKeyword && matchesStatus && matchesCategory;
     });
-    return wait(parseDocuments(filtered));
+    const offset = params.offset ?? 0;
+    const limit = params.limit ?? filtered.length;
+    return wait(parseDocuments(filtered.slice(offset, offset + limit)));
   },
 
-  async uploadDocument(request: UploadDocumentRequest): Promise<KnowledgeDocument> {
+  async listDocumentsPage(params: ListKnowledgeDocumentsParams): Promise<KnowledgeDocumentPage> {
+    const keyword = params.search?.trim().toLowerCase() ?? "";
+    const filtered = documents.filter((document) => {
+      const matchesKeyword = !keyword || document.name.toLowerCase().includes(keyword);
+      const matchesStatus = !params.statuses?.length || params.statuses.includes(document.status);
+      const matchesCategory = !params.category || document.category === params.category;
+      return matchesKeyword && matchesStatus && matchesCategory;
+    });
+    const offset = params.offset ?? 0;
+    const limit = params.limit ?? 10;
+    return wait({
+      items: parseDocuments(filtered.slice(offset, offset + limit)),
+      totalCount: filtered.length,
+    });
+  },
+
+  async listRecentDocuments(params: ListKnowledgeDocumentsParams): Promise<KnowledgeDocument[]> {
+    const documents = await this.listDocuments({ ...params, limit: params.limit ?? 6, offset: 0 });
+    return documents;
+  },
+
+  async listCategories(): Promise<string[]> {
+    return wait([...new Set(documents.map((document) => document.category))].sort());
+  },
+
+  async previewUpload(request: UploadDocumentRequest): Promise<KnowledgeUploadPreview> {
+    const uploadId = `mock-${Date.now()}`;
+    pendingUploads.set(uploadId, request);
+    return wait({
+      uploadId,
+      fileName: request.file.name,
+      category: request.category,
+      policyNameGuess: request.file.name.replace(/\.[^.]+$/, ""),
+      versionLabel: "v1.0",
+      fileSizeBytes: request.file.size,
+      isAllowed: true,
+      warnings: [],
+      sectionCount: 12,
+      chunkCount: 96,
+    });
+  },
+
+  async ingestUpload(preview: KnowledgeUploadPreview): Promise<KnowledgeIngestResult> {
+    const request = pendingUploads.get(preview.uploadId);
+    if (!request) throw new Error("上传预览已失效，请重新选择文件。");
+    pendingUploads.delete(preview.uploadId);
+
     const fileName = request.file.name;
     const type = fileName.toLowerCase().endsWith(".docx") ? "DOCX" : fileName.toLowerCase().endsWith(".xlsx") ? "XLSX" : "PDF";
     const document: KnowledgeDocument = {
@@ -106,14 +160,24 @@ export const knowledgeBaseMockApi = {
       size: "1.8 MB",
       category: request.category,
       version: "v1.0",
-      status: "processing",
-      progress: 24,
-      chunks: 0,
+      status: "ready",
+      progress: 100,
+      chunks: preview.chunkCount,
       updatedAt: "刚刚",
       updatedBy: "当前用户",
     };
     documents = [document, ...documents];
-    return wait(parseDocuments([document])[0]);
+    return wait({
+      documentId: document.id,
+      versionId: document.id,
+      versionLabel: document.version,
+      chunkCount: document.chunks,
+      persisted: true,
+    });
+  },
+
+  async activatePublication(_documentId: number, _versionId: number): Promise<void> {
+    await wait(undefined, 80);
   },
 
   async retryDocument(documentId: number): Promise<KnowledgeDocument> {
@@ -124,7 +188,14 @@ export const knowledgeBaseMockApi = {
     return wait(parseDocuments([next])[0]);
   },
 
-  async search(query: string): Promise<KnowledgeSearchResponse> {
-    return wait({ query, results: retrievalResults.map((result) => ({ ...result, tags: [...result.tags] })) });
+  async search(query: string, topK = 5): Promise<KnowledgeSearchResponse> {
+    return wait({
+      query,
+      strategy: "mock",
+      stages: [],
+      results: retrievalResults
+        .slice(0, topK)
+        .map((result) => ({ ...result, tags: [...result.tags] })),
+    });
   },
 };

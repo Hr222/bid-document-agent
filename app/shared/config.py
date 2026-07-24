@@ -7,15 +7,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """应用配置：优先从环境变量和 `.env` 中加载。"""
 
-    app_name: str = "Bid Document Agent"
+    app_name: str = "Go Agent System"
     app_version: str = "0.1.0"
+    backend_host: str = "127.0.0.1"
+    backend_port: int = Field(default=9205, gt=0, le=65535)
     api_v1_prefix: str = "/api/v1"
     policy_pipeline_workspace: str = ".runtime/policy_pipeline"
     policy_upload_max_size_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
     policy_upload_retention_seconds: int = Field(default=24 * 60 * 60, gt=0)
 
     postgres_driver: str = "postgresql+psycopg"
-    postgres_db: str = "bid_document_agent"
+    postgres_db: str = "go_agent_system"
     postgres_user: str = "admin"
     postgres_password: str = "123456"
     postgres_host: str = "127.0.0.1"

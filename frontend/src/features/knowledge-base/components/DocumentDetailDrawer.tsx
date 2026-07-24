@@ -1,14 +1,16 @@
-import { Alert, Button, Descriptions, Drawer, Space, Steps, Tag, Typography } from "antd";
+import { Alert, Button, Descriptions, Drawer, Skeleton, Space, Steps, Tag, Typography } from "antd";
 import { RefreshCw } from "lucide-react";
 
 import type { KnowledgeDocument } from "../types";
 
 export function DocumentDetailDrawer({
   document,
+  loading,
   onClose,
   onRetry,
 }: {
   document: KnowledgeDocument | null;
+  loading?: boolean;
   onClose: () => void;
   onRetry: (documentId: number) => void;
 }) {
@@ -46,7 +48,7 @@ export function DocumentDetailDrawer({
       onClose={onClose}
       extra={document ? <Tag color={statusColor}>{statusLabel}</Tag> : undefined}
     >
-      <Space direction="vertical" size={22} style={{ width: "100%" }}>
+      {loading ? <Skeleton active paragraph={{ rows: 6 }} /> : <Space direction="vertical" size={22} style={{ width: "100%" }}>
         {document && (
           <>
             <div>
@@ -88,7 +90,7 @@ export function DocumentDetailDrawer({
             </div>
           </>
         )}
-      </Space>
+      </Space>}
     </Drawer>
   );
 }

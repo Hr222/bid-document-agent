@@ -11,10 +11,12 @@ from app.composition.ingestion import (
     build_ingestion_use_case,
     build_pipeline,
     build_policy_candidate_scan_use_case,
+    build_retry_ingestion_use_case,
     build_upload_service,
 )
 from app.composition.knowledge import (
     build_knowledge_base_service,
+    build_knowledge_management_service,
     build_persistence_gateway,
     build_publication_service,
     build_query_capability,
@@ -47,10 +49,12 @@ from app.infrastructure.persistence.session import SessionLocal
 from app.interfaces.agent import FunctionCallingAdapter
 from app.modules.agent.tender.ports.llm_port import StructuredLlmPort
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
+from app.modules.ingestion.application.retry_ingestion import RetryIngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
 from app.modules.ingestion.pipeline import PolicyIngestionService
 from app.modules.knowledge import KnowledgeBaseQueryCapability, KnowledgePublicationService
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
+from app.modules.knowledge.application.management_service import KnowledgeManagementService
 from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.application.data_acquisition import (
@@ -123,11 +127,13 @@ class ApplicationContainer:
         self._publication_service: KnowledgePublicationService | None = None
         self._ingestion_preview_use_case: IngestionUseCase | None = None
         self._ingestion_use_case: IngestionUseCase | None = None
+        self._retry_ingestion_use_case: RetryIngestionUseCase | None = None
         self._ask_knowledge_use_case: AskKnowledgeUseCase | None = None
         self._policy_upload_service: PolicyUploadService | None = None
         self._policy_ingestion_service: PolicyIngestionService | None = None
         self._policy_candidate_scan_use_case: PolicyCandidateScanUseCase | None = None
         self._knowledge_base_service: KnowledgeBaseService | None = None
+        self._knowledge_management_service: KnowledgeManagementService | None = None
         self._embedding_service: GiteeEmbeddingClient | None = None
         self._file_service: PolicyFileService | None = None
         self._ocr_service: PolicyOcrService | None = None
@@ -291,6 +297,14 @@ class ApplicationContainer:
             )
         return self._ingestion_use_case
 
+    def retry_ingestion_use_case(self) -> RetryIngestionUseCase:
+        if self._retry_ingestion_use_case is None:
+            self._retry_ingestion_use_case = build_retry_ingestion_use_case(
+                self.ingestion_use_case(),
+                self.persistence_gateway(),
+            )
+        return self._retry_ingestion_use_case
+
     def policy_upload_service(self) -> PolicyUploadService:
         if self._policy_upload_service is None:
             self._policy_upload_service = build_upload_service(
@@ -316,3 +330,10 @@ class ApplicationContainer:
                 self.knowledge_read_repository()
             )
         return self._knowledge_base_service
+
+    def knowledge_management_service(self) -> KnowledgeManagementService:
+        if self._knowledge_management_service is None:
+            self._knowledge_management_service = build_knowledge_management_service(
+                self.knowledge_read_repository()
+            )
+        return self._knowledge_management_service

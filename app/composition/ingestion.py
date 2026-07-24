@@ -9,8 +9,9 @@ from app.infrastructure.filesystem.upload_service import PolicyUploadService
 from app.infrastructure.ocr.tencent_ocr import PolicyOcrService
 from app.modules.ingestion import PolicyIngestionService, PolicyPipelineService
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
+from app.modules.ingestion.application.retry_ingestion import RetryIngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
-from app.modules.ingestion.ports import ChunkEmbeddingPort
+from app.modules.ingestion.ports import ChunkEmbeddingPort, IngestionRetrySourcePort
 from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
 
 
@@ -39,6 +40,13 @@ def build_ingestion_service() -> PolicyIngestionService:
 
 def build_ingestion_use_case(pipeline: PolicyPipelineService) -> IngestionUseCase:
     return IngestionUseCase(pipeline)
+
+
+def build_retry_ingestion_use_case(
+    ingestion_use_case: IngestionUseCase,
+    source_port: IngestionRetrySourcePort,
+) -> RetryIngestionUseCase:
+    return RetryIngestionUseCase(ingestion_use_case, source_port)
 
 
 def build_policy_candidate_scan_use_case(

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.shared.config import settings
+
+RetrievalMode = Literal["exact", "hnsw", "hybrid"]
 
 
 class RetrievalSearchRequest(BaseModel):
@@ -17,6 +21,10 @@ class RetrievalSearchRequest(BaseModel):
     responsible_department: str | None = Field(default=None, description="责任部门过滤。")
     document_id: int | None = Field(default=None, ge=1, description="制度主档过滤。")
     include_history: bool = Field(default=False, description="是否包含历史版本。")
+    retrieval_mode: RetrievalMode = Field(
+        default="hybrid",
+        description="检索模式：精确向量、HNSW 向量或多路召回。",
+    )
 
 
 class RetrievalFilters(BaseModel):
@@ -92,6 +100,10 @@ class RagAskRequest(BaseModel):
     responsible_department: str | None = Field(default=None, description="责任部门过滤。")
     document_id: int | None = Field(default=None, ge=1, description="制度主档过滤。")
     include_history: bool = Field(default=False, description="是否包含历史版本。")
+    retrieval_mode: RetrievalMode = Field(
+        default="hybrid",
+        description="检索模式：精确向量、HNSW 向量或多路召回。",
+    )
 
 
 class AnswerCitation(BaseModel):

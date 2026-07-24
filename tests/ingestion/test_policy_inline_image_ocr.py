@@ -10,6 +10,8 @@ from app.modules.ingestion.contracts import ParsedBlock, ParsedDocumentResult
 from app.modules.ingestion.pipeline.steps.policy_parser import PolicyParserService
 from app.modules.ingestion.pipeline.steps.policy_text_assembler import PolicyTextAssemblerService
 
+TEST_FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
+
 
 def make_block(
     *,
@@ -35,7 +37,7 @@ def make_block(
 def test_docx_with_text_and_inline_image_still_selects_image_for_ocr() -> None:
     document = ParsedDocumentResult(
         parser_status="parsed",
-        source_path="D:/workspace/bid-document-agent/tests/fixtures/mixed.docx",
+        source_path=str(TEST_FIXTURES_DIR / "mixed.docx"),
         file_type="docx",
         suspected_scanned=False,
         blocks=[
@@ -73,7 +75,7 @@ def test_docx_with_text_and_inline_image_still_selects_image_for_ocr() -> None:
 def test_mixed_pdf_with_embedded_image_selects_image_for_ocr() -> None:
     document = ParsedDocumentResult(
         parser_status="parsed",
-        source_path="D:/workspace/bid-document-agent/tests/fixtures/mixed.pdf",
+        source_path=str(TEST_FIXTURES_DIR / "mixed.pdf"),
         file_type="pdf",
         suspected_scanned=False,
         blocks=[
@@ -130,7 +132,7 @@ def test_parse_docx_keeps_inline_image_placeholder_order(tmp_path: Path) -> None
 def test_text_assembler_reinserts_inline_ocr_text_and_hides_placeholder() -> None:
     document = ParsedDocumentResult(
         parser_status="parsed",
-        source_path="D:/workspace/bid-document-agent/tests/fixtures/mixed.docx",
+        source_path=str(TEST_FIXTURES_DIR / "mixed.docx"),
         file_type="docx",
         suspected_scanned=False,
         blocks=[

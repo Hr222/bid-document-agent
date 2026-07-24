@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.modules.knowledge.ports.read_port import KnowledgeQuery
+from app.modules.knowledge.ports.read_port import KnowledgeQuery, KnowledgeRetrievalMode
 from app.modules.knowledge.retrieval.contracts import (
     QueryEmbeddingService,
     RetrievalRepository,
@@ -14,6 +14,8 @@ from app.modules.knowledge.retrieval.policies import (
 )
 from app.modules.knowledge.retrieval.rerank import HeuristicRetrievalReranker
 from app.modules.knowledge.retrieval.vector_search import (
+    ExactVectorSearchStrategy,
+    HnswVectorSearchStrategy,
     VectorSearchRequest,
     VectorSearchStrategy,
     build_vector_search_strategy,
@@ -51,18 +53,25 @@ class HybridRetrievalPipeline:
         self.rerank_signal_weight = self.reranker.signal_weight
 
     def run(self, request: KnowledgeQuery) -> RetrievalPipelineResult:
+        retrieval_mode = request.retrieval_mode
+        vector_search_strategy = self._resolve_vector_search_strategy(retrieval_mode)
+        use_hybrid_recall = retrieval_mode == "hybrid"
         # 双路召回时，每一路都多取一些候选，给后续融合和重排留空间。
         per_source_top_k = min(
             settings.retrieval_top_k_max,
             max(request.top_k, request.top_k * 2),
         )
         # 先按查询语义提取更适合关键词召回的核心片段，避免“哪些/多久”之类问句外壳干扰。
-        keyword_plan = self.query_policy.build_keyword_plan(request.query)
+        keyword_plan = (
+            self.query_policy.build_keyword_plan(request.query)
+            if use_hybrid_recall
+            else RetrievalKeywordPlan(normalized_query="", focus_query="", keywords=[])
+        )
         if self.embedding_service is None:
             raise RuntimeError("知识检索缺少查询向量适配器。")
         query_embedding = self.embedding_service.embed_query(request.query)
 
-        vector_hits = self.vector_search_strategy.search(
+        vector_hits = vector_search_strategy.search(
             repository=self.repository,
             request=VectorSearchRequest(
                 query_embedding=query_embedding,
@@ -73,24 +82,32 @@ class HybridRetrievalPipeline:
                 include_history=request.include_history,
             ),
         )
-        keyword_hits = self.repository.search_chunks_by_keywords(
-            focus_query=keyword_plan.focus_query,
-            keywords=keyword_plan.keywords,
-            priority_keywords=keyword_plan.priority_keywords,
-            top_k=per_source_top_k,
-            policy_category=request.policy_category,
-            responsible_department=request.responsible_department,
-            document_id=request.document_id,
-            include_history=request.include_history,
+        keyword_hits = (
+            self.repository.search_chunks_by_keywords(
+                focus_query=keyword_plan.focus_query,
+                keywords=keyword_plan.keywords,
+                priority_keywords=keyword_plan.priority_keywords,
+                top_k=per_source_top_k,
+                policy_category=request.policy_category,
+                responsible_department=request.responsible_department,
+                document_id=request.document_id,
+                include_history=request.include_history,
+            )
+            if use_hybrid_recall
+            else []
         )
         fused_hits = self._merge_hits(
             vector_hits=vector_hits,
             keyword_hits=keyword_hits,
         )
-        reranked_hits = self._rerank_hits(
-            query=request.query,
-            keyword_plan=keyword_plan,
-            hits=fused_hits,
+        reranked_hits = (
+            self._rerank_hits(
+                query=request.query,
+                keyword_plan=keyword_plan,
+                hits=fused_hits,
+            )
+            if use_hybrid_recall
+            else fused_hits
         )
         # 阈值过滤放在融合与重排之后执行，避免单路低分但双路一致命中的结果被过早丢掉。
         rescued_hit_count = 0
@@ -115,11 +132,11 @@ class HybridRetrievalPipeline:
             ),
             RetrievalStageTrace(
                 name="vector_recall",
-                source=self.vector_search_strategy.source_name,
+                source=vector_search_strategy.source_name,
                 input_count=None,
                 output_count=len(vector_hits),
                 details={
-                    "strategy": self.vector_search_strategy.strategy_name,
+                    "strategy": vector_search_strategy.strategy_name,
                     "top_k": per_source_top_k,
                     "include_history": request.include_history,
                     "document_filter": request.document_id,
@@ -129,13 +146,17 @@ class HybridRetrievalPipeline:
             ),
             RetrievalStageTrace(
                 name="keyword_recall",
-                source="like_keyword_match",
-                input_count=len(keyword_plan.keywords),
+                source="like_keyword_match" if use_hybrid_recall else "disabled_by_mode",
+                input_count=len(keyword_plan.keywords) if use_hybrid_recall else 0,
                 output_count=len(keyword_hits),
-                details=self._build_keyword_recall_trace_details(
-                    per_source_top_k=per_source_top_k,
-                    keyword_plan=keyword_plan,
-                    keyword_hits=keyword_hits,
+                details=(
+                    self._build_keyword_recall_trace_details(
+                        per_source_top_k=per_source_top_k,
+                        keyword_plan=keyword_plan,
+                        keyword_hits=keyword_hits,
+                    )
+                    if use_hybrid_recall
+                    else {"mode": retrieval_mode}
                 ),
             ),
             RetrievalStageTrace(
@@ -151,14 +172,18 @@ class HybridRetrievalPipeline:
             ),
             RetrievalStageTrace(
                 name="rerank",
-                source=self.reranker.source_name,
+                source=self.reranker.source_name if use_hybrid_recall else "disabled_by_mode",
                 input_count=len(fused_hits),
                 output_count=len(reranked_hits),
-                details=self._build_rerank_trace_details(
-                    query=request.query,
-                    keyword_plan=keyword_plan,
-                    before_hits=fused_hits,
-                    after_hits=reranked_hits,
+                details=(
+                    self._build_rerank_trace_details(
+                        query=request.query,
+                        keyword_plan=keyword_plan,
+                        before_hits=fused_hits,
+                        after_hits=reranked_hits,
+                    )
+                    if use_hybrid_recall
+                    else {"mode": retrieval_mode}
                 ),
             ),
             RetrievalStageTrace(
@@ -178,10 +203,26 @@ class HybridRetrievalPipeline:
         return RetrievalPipelineResult(
             hits=filtered_hits,
             pipeline=self.pipeline_name,
-            strategy=f"{self.strategy_name}/{self.vector_search_strategy.strategy_name}",
+            strategy=(
+                f"{self.strategy_name}/{vector_search_strategy.strategy_name}"
+                if use_hybrid_recall
+                else f"{retrieval_mode}-vector/{vector_search_strategy.strategy_name}"
+            ),
             min_score=settings.retrieval_min_score,
             traces=traces,
         )
+
+    def _resolve_vector_search_strategy(
+        self,
+        retrieval_mode: KnowledgeRetrievalMode,
+    ) -> VectorSearchStrategy:
+        if retrieval_mode == "exact":
+            return ExactVectorSearchStrategy()
+        if retrieval_mode == "hnsw":
+            return HnswVectorSearchStrategy()
+        if retrieval_mode == "hybrid":
+            return self.vector_search_strategy
+        raise ValueError(f"不支持的检索模式：{retrieval_mode}")
 
     def _build_keyword_recall_trace_details(
         self,

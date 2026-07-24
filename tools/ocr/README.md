@@ -4,8 +4,8 @@
 
 ## 当前脚本
 
-- [tencent_ocr_mvp.py](/D:/workspace/bid-document-agent/tools/ocr/tencent_ocr_mvp.py)
-- [classify_sample_inventory.py](/D:/workspace/bid-document-agent/tools/ocr/classify_sample_inventory.py)
+- [tencent_ocr_mvp.py](tencent_ocr_mvp.py)
+- [classify_sample_inventory.py](classify_sample_inventory.py)
 
 安全要求：真实文档、OCR 原始响应、分类 CSV/JSON 和训练样本只能放在仓库外部或本地 `.runtime`，禁止提交到 Git。
 

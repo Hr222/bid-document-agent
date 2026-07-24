@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from app.modules.knowledge.ports.read_port import (
     KnowledgeQuery,
     KnowledgeQueryResult,
+    KnowledgeRetrievalMode,
     KnowledgeSearchHit,
 )
 from app.modules.online.domain.citation import AnswerCitationResult
@@ -18,6 +19,7 @@ class AskKnowledgeCommand:
     responsible_department: str | None = None
     document_id: int | None = None
     include_history: bool = False
+    retrieval_mode: KnowledgeRetrievalMode = "hybrid"
 
     def as_knowledge_query(self) -> KnowledgeQuery:
         return KnowledgeQuery(
@@ -27,6 +29,7 @@ class AskKnowledgeCommand:
             responsible_department=self.responsible_department,
             document_id=self.document_id,
             include_history=self.include_history,
+            retrieval_mode=self.retrieval_mode,
         )
 
 

@@ -1,6 +1,6 @@
 ## 项目定位
 
-Bid Document Agent 当前围绕三类核心能力建设：
+Go Agent System 当前围绕三类核心能力建设：
 
 1. 知识文档入库
 2. 基于知识库的检索与问答
@@ -190,13 +190,13 @@ docker compose --env-file .env -f docker/postgres/docker-compose.yml up -d
 ### 启动后端
 
 ```bash
-uvicorn app.main:app --reload
+python -m app.run
 ```
 
 后端地址：
 
-- `http://127.0.0.1:8000`
-- `http://127.0.0.1:8000/docs`
+- 根据 `.env` 中的 `BACKEND_HOST` 和 `BACKEND_PORT` 确定
+- 例如：`http://127.0.0.1:9205/docs`
 
 ### 启动前端
 
@@ -205,6 +205,8 @@ cd frontend
 npm install
 npm run dev
 ```
+
+前端地址：`http://127.0.0.1:5426`
 
 ## HTTP API
 

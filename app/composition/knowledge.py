@@ -22,6 +22,7 @@ from app.infrastructure.persistence.repositories.policy_persistence_gateway impo
 )
 from app.infrastructure.persistence.session import SessionLocal
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
+from app.modules.knowledge.application.management_service import KnowledgeManagementService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
 from app.modules.knowledge.application.quality_audit import KnowledgeQualityAuditService
 from app.modules.knowledge.application.query_capability import KnowledgeBaseQueryCapability
@@ -81,6 +82,12 @@ def build_publication_service(session: Session) -> KnowledgePublicationService:
 
 def build_knowledge_base_service(read_repository: KnowledgeReadRepository) -> KnowledgeBaseService:
     return KnowledgeBaseService(read_port=read_repository)
+
+
+def build_knowledge_management_service(
+    read_repository: KnowledgeReadRepository,
+) -> KnowledgeManagementService:
+    return KnowledgeManagementService(read_port=read_repository)
 
 
 def build_benchmark_retrieval_service(

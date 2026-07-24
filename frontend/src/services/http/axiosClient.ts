@@ -9,6 +9,6 @@ export const axiosClient = axios.create({
 });
 
 axiosClient.interceptors.request.use((config) => {
-  config.headers.set("X-Client", "bid-document-agent-frontend");
+  config.headers.set("X-Client", "go-agent-system-frontend");
   return config;
 });

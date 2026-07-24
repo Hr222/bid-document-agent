@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.infrastructure.ocr.tencent_ocr import PolicyOcrService
 from app.modules.ingestion.contracts import ParsedBlock, ParsedDocumentResult
 from app.shared.config import settings
+
+TEST_FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 
 
 def make_block(
@@ -31,7 +35,7 @@ def make_document(*blocks: ParsedBlock, suspected_scanned: bool = True) -> Parse
     ]
     return ParsedDocumentResult(
         parser_status="parsed",
-        source_path="D:/workspace/bid-document-agent/tests/fixtures/scanned.pdf",
+        source_path=str(TEST_FIXTURES_DIR / "scanned.pdf"),
         file_type="pdf",
         suspected_scanned=suspected_scanned,
         blocks=normalized_blocks,
@@ -65,7 +69,7 @@ def test_select_ocr_targets_supports_standalone_image_documents() -> None:
     service = PolicyOcrService(client=object())
     document = ParsedDocumentResult(
         parser_status="parsed",
-        source_path="D:/workspace/bid-document-agent/tests/fixtures/page-1.png",
+        source_path=str(TEST_FIXTURES_DIR / "page-1.png"),
         file_type="image",
         suspected_scanned=True,
         blocks=[
@@ -88,7 +92,7 @@ def test_select_ocr_targets_supports_image_only_docx() -> None:
     service = PolicyOcrService(client=object())
     document = ParsedDocumentResult(
         parser_status="parsed",
-        source_path="D:/workspace/bid-document-agent/tests/fixtures/scanned.docx",
+        source_path=str(TEST_FIXTURES_DIR / "scanned.docx"),
         file_type="docx",
         suspected_scanned=True,
         blocks=[
