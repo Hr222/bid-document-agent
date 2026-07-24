@@ -1,6 +1,15 @@
-# 当前架构基准
+# 当前架构基准（迭代一）
 
-## 最终结构图
+本版本明确以下长期边界：
+
+- LLM 是独立的通用能力层，不属于任何一个 Agent。
+- Agent 是业务能力和编排能力的承载者，通过通用 LLM Port 使用模型。
+- Agent Runtime 负责多步骤编排、状态流转和 SubAgent 协作；具体编排框架可以替换。
+- Function Calling、MCP 等是 Agent 能力的外部接入协议，不是 LLM 层职责。
+- 对话入口不等于 Agent；原始 LLM 对话和 Agent 对话是两种不同的应用用例。
+- 上下文记忆属于独立的 Conversation 能力，不应隐含在 LLM Adapter 或具体 Agent 中。
+
+## 总体结构图
 
 ```mermaid
 flowchart LR
@@ -8,21 +17,24 @@ flowchart LR
         direction TB
         Http["HTTP API"]
         HttpAdapter["HTTP Assemblers"]
-        Agent["LangChain / LangGraph"]
-        ToolAdapter["Function Calling Adapter"]
+        AgentAdapter["Agent Protocol Adapters<br/>Function Calling / MCP"]
 
         Http --> HttpAdapter
-        Agent --> ToolAdapter
     end
 
     subgraph Applications["Applications 应用模块层"]
         direction TB
+        Llm["LLM Capability<br/>Chat / Structured Output / Embedding"]
+        AgentRuntime["Agent Runtime<br/>Orchestration / SubAgents"]
+        AgentCapabilities["Agent Capabilities<br/>Tender / Finance / Risk"]
         Online["Online Application<br/>RAG Facade / Decision"]
         Ingestion["Ingestion Application<br/>文档入库用例"]
 
         HttpAdapter --> Online
         HttpAdapter --> Ingestion
-        ToolAdapter --> Online
+        HttpAdapter --> Llm
+        AgentAdapter --> AgentRuntime
+        AgentRuntime --> AgentCapabilities
     end
 
     subgraph Knowledge["Knowledge 知识能力层"]
@@ -36,22 +48,33 @@ flowchart LR
         Ingestion --> Publish
     end
 
+    subgraph PortsLayer["Application Ports 应用能力端口"]
+        direction TB
+        Ports["Business Ports<br/>Read / Write / Publication"]
+        LlmPorts["LLM Ports<br/>Chat / Structured / Embedding"]
+    end
+
     subgraph Persistence["Persistence 持久化与基础设施层"]
         direction TB
-        Ports["Ports<br/>Read / Write / Publication"]
         Repositories["Repository Layer<br/>Read / Write / Publication Repository"]
-        Providers["Technical Adapters<br/>LLM / Embedding / OCR / File System"]
+        Providers["Technical Adapters<br/>GLM / LangChain / OCR / File System"]
         Storage[("PostgreSQL / pgvector<br/>Published Read Model / Vector Index")]
 
         Query --> Ports
         Write --> Ports
         Publish --> Ports
+        Llm --> LlmPorts
+        AgentRuntime --> LlmPorts
+        AgentCapabilities --> LlmPorts
         Ports -.实现.-> Repositories
+        LlmPorts -.实现.-> Providers
         Repositories --> Storage
     end
 
     Composition["Composition Root<br/>ApplicationContainer"]
 
+    Composition -.->|组装| Llm
+    Composition -.->|组装| AgentRuntime
     Composition -.->|组装| Online
     Composition -.->|组装| Ingestion
     Composition -.->|组装| Query
@@ -61,21 +84,45 @@ flowchart LR
     classDef interface fill:#e8f1ff,stroke:#3478c9,color:#123b63;
     classDef application fill:#eaf7ee,stroke:#3c9b5f,color:#1d5c32;
     classDef knowledge fill:#fff7e6,stroke:#d99a18,color:#714e00;
+    classDef port fill:#eef7f7,stroke:#3b8f8f,color:#1f5d5d;
     classDef infrastructure fill:#f4f0ff,stroke:#7956b3,color:#432d6e;
     classDef composition fill:#f5f5f5,stroke:#666,color:#333;
 
-    class Http,HttpAdapter,Agent,ToolAdapter interface;
-    class Online,Ingestion application;
+    class Http,HttpAdapter,AgentAdapter interface;
+    class Llm,AgentRuntime,Online,Ingestion application;
     class Query,Write,Publish knowledge;
-    class Ports,Repositories,Providers,Storage infrastructure;
+    class Ports,LlmPorts port;
+    class Repositories,Providers,Storage infrastructure;
     class Composition composition;
 ```
 
-## 当前物理目录结构
+## 模块组织基线
 
 ```text
 app/
-├── modules/                              # 三大业务模块总包
+├── modules/                              # 应用能力模块总包
+│   ├── llm/                               # 独立 LLM 能力层
+│   │   ├── application/
+│   │   │   └── chat.py                    # Chat / 模型调用用例
+│   │   ├── ports/
+│   │   │   ├── chat_port.py               # 文本对话能力
+│   │   │   ├── structured_output_port.py  # 结构化输出能力
+│   │   │   └── embedding_port.py          # 向量能力边界
+│   │   └── contracts.py                   # LLM 请求、结果和失败契约
+│   │
+│   ├── conversation/                      # 会话、上下文和消息生命周期
+│   │   ├── application/
+│   │   ├── domain/
+│   │   └── ports/
+│   │
+│   ├── agent/                             # Agent 业务能力与运行时
+│   │   ├── runtime/                        # 编排、状态和 SubAgent 协作边界
+│   │   ├── tender/
+│   │   │   ├── application/
+│   │   │   ├── domain/
+│   │   │   └── ports/
+│   │   └── ...
+│   │
 │   ├── online/                           # 在线 RAG / Decision
 │   │   ├── application/
 │   │   │   ├── rag_facade.py
@@ -127,8 +174,9 @@ app/
 │   │   ├── routes/
 │   │   ├── assemblers/
 │   │   └── schemas/
-│   └── agent/                            # LangChain / LangGraph
+│   └── agent/                             # Agent 外部接入适配层
 │       ├── function_calling_adapter.py
+│       ├── mcp_adapter.py
 │       └── contracts.py
 │
 ├── infrastructure/                       # 基础设施具体实现
@@ -140,8 +188,13 @@ app/
 │   │   ├── models/                        # ORM 持久化模型
 │   │   └── session.py
 │   ├── llm/
+│   │   ├── openai_client_factory.py
+│   │   ├── langchain_glm_adapter.py
+│   │   ├── chat_adapter.py
 │   │   ├── llm_client.py
 │   │   └── embedding_client.py
+│   ├── agent/
+│   │   └── langgraph_runtime_adapter.py
 │   ├── ocr/
 │   │   └── tencent_ocr.py
 │   └── filesystem/
@@ -150,6 +203,8 @@ app/
 │
 ├── composition/                          # Composition Root
 │   ├── root.py
+│   ├── llm.py
+│   ├── agent.py
 │   ├── online.py
 │   ├── knowledge.py
 │   └── ingestion.py
@@ -165,30 +220,44 @@ app/
 ```mermaid
 flowchart TB
     HTTP["interfaces/http"]
-    Agent["interfaces/agent"]
+    AgentProtocols["interfaces/agent<br/>Function Calling / MCP"]
+    LlmApplication["modules/llm/application"]
+    LlmPorts["modules/llm/ports"]
+    Conversation["modules/conversation"]
+    AgentRuntime["modules/agent/runtime"]
+    AgentCapabilities["modules/agent/*"]
     Online["modules/online"]
     Ingestion["modules/ingestion"]
     KnowledgeQuery["modules/knowledge<br/>Query Capability"]
     KnowledgeWrite["modules/knowledge<br/>Write / Publication Capability"]
     Ports["modules/knowledge/ports"]
     Repositories["infrastructure/persistence/repositories"]
-    Providers["infrastructure/llm / ocr / filesystem"]
+    LlmAdapters["infrastructure/llm"]
+    Providers["infrastructure/ocr / filesystem"]
     Storage[("PostgreSQL / pgvector / Object Storage")]
 
+    HTTP --> LlmApplication
+    HTTP --> Conversation
+    HTTP --> AgentRuntime
     HTTP --> Online
     HTTP --> Ingestion
-    Agent --> Online
+    AgentProtocols --> AgentRuntime
 
+    LlmApplication --> LlmPorts
+    AgentRuntime --> LlmPorts
+    AgentRuntime --> AgentCapabilities
+    AgentCapabilities --> LlmPorts
+    AgentCapabilities --> KnowledgeQuery
     Online --> KnowledgeQuery
     Ingestion --> KnowledgeWrite
     KnowledgeQuery --> Ports
     KnowledgeWrite --> Ports
     Ports -.实现.-> Repositories
+    LlmPorts -.实现.-> LlmAdapters
     Repositories --> Storage
-    Online -.依赖.-> Providers
-    Ingestion -.依赖.-> Providers
+    Ingestion -.依赖端口.-> Providers
 
-    Forbidden["禁止：Online 直接依赖 Ingestion<br/>禁止：Ingestion 直接依赖 Online<br/>禁止：Domain 依赖 HTTP / DB / LangChain"]
+    Forbidden["禁止：业务模块直接依赖 SDK / DB<br/>禁止：Agent 绕过 Application 访问 Repository<br/>禁止：Domain 依赖 HTTP / LangChain / LangGraph"]
 
     classDef forbidden fill:#fff1f0,stroke:#cf1322,color:#820014;
     class Forbidden forbidden;
@@ -200,13 +269,28 @@ flowchart TB
 flowchart LR
     subgraph External["外部调用"]
         HTTP["HTTP API"]
-        Agent["LangChain / LangGraph"]
+        FunctionCalling["Function Calling"]
+        MCP["MCP Client / Server"]
         Source["文档 / PDF / 图片"]
+    end
+
+    subgraph Llm["独立 LLM 能力层"]
+        Chat["Chat Application"]
+        LlmPort["Chat / Structured LLM Port"]
+        LlmAdapter["GLM / LangChain Adapter"]
+    end
+
+    subgraph Agent["Agent 应用与运行时"]
+        AgentHttp["Agent HTTP Adapter"]
+        AgentProtocol["Function / MCP Adapter"]
+        Runtime["Agent Runtime<br/>Orchestration / SubAgents"]
+        Registry["Agent Capability Registry"]
+        Tender["Tender Agent"]
+        OtherAgents["Finance / Risk / Other Agents"]
     end
 
     subgraph Online["在线应用层：RAG / Decision"]
         HttpAdapter["HTTP Assembler"]
-        ToolAdapter["Function Calling Adapter"]
         Facade["RAG Application Facade"]
         Ask["AskKnowledge"]
         Decision["Policy Decision"]
@@ -231,12 +315,22 @@ flowchart LR
 
     PublicationHttp["HTTP Publication Route"]
 
+    HTTP --> Chat
+    HTTP --> AgentHttp
     HTTP --> HttpAdapter
     HTTP --> PublicationHttp
-    Agent --> ToolAdapter
+    FunctionCalling --> AgentProtocol
+    MCP --> AgentProtocol
 
+    Chat --> LlmPort
+    AgentHttp --> Runtime
+    AgentProtocol --> Runtime
+    Runtime --> LlmPort
+    Runtime --> Registry
+    Registry --> Tender
+    Registry --> OtherAgents
+    Tender --> LlmPort
     HttpAdapter --> Facade
-    ToolAdapter --> Facade
     Facade --> Ask
     Facade --> Decision
 
@@ -254,7 +348,78 @@ flowchart LR
     PublicationHttp --> Publish
     Publish --> PublishRepo
     PublishRepo --> Store
+    LlmPort --> LlmAdapter
 ```
+
+## LLM、Agent 与协议边界
+
+### LLM 能力层
+
+`modules/llm` 表达模型调用能力，不表达任何具体业务。它可以被普通 Chat、Agent Runtime、RAG 或其他应用能力共同使用。
+
+LLM 层负责的能力包括：
+
+- 文本对话和模型响应
+- Structured Output 和 Schema 校验
+- Embedding 等模型能力
+- Provider 配置、超时、重试边界和错误契约
+- Prompt 输入的技术载体和模型调用结果
+
+LLM 层不负责：
+
+- 招标书、财务或风控业务规则
+- Agent 状态机和多 Agent 协作
+- Function Calling 工具注册与业务执行
+- MCP 会话和远程能力治理
+- 会话历史和上下文持久化
+
+`infrastructure/llm` 只实现 LLM Port，具体 SDK、LangChain Chat Model 和 Provider Client 不得向上层泄漏。
+
+### Agent 能力层
+
+`modules/agent/*` 负责具体业务 Agent 和可组合能力。每个 Agent 可以使用 LLM，也可以调用知识库、文件、外部服务或其他 Agent，但不重复实现 LLM Chat。
+
+Agent 可以通过稳定的能力契约被运行时发现和调用。能力契约至少包含：
+
+- 能力名称和描述
+- 输入 Schema
+- 输出 Schema
+- 执行状态和错误契约
+- 权限、超时和可重试边界
+
+一个 Agent 不等于一个 Chat 服务，也不要求每个 Agent 都暴露自己的对话接口。是否以对话方式使用 Agent，由上层交互用例和 Agent Runtime 决定。
+
+### Agent Runtime 与 SubAgent
+
+Agent Runtime 负责：
+
+- 选择和调用 Agent 能力
+- 管理多步骤执行状态
+- 将 LLM 返回的工具调用转换为能力调用
+- 协调多个 Agent 或 SubAgent
+- 处理暂停、失败、重试和恢复边界
+
+LangGraph 可以作为 Agent Runtime 的一种具体实现，但不能成为 Domain 或通用 LLM Port 的依赖。后续更换编排实现时，Agent 业务能力和 LLM Port 不应跟着改变。
+
+### Function Calling 与 MCP
+
+Function Calling 和 MCP 都属于 Agent 能力的接入协议，分别适配不同的调用来源或外部生态：
+
+```text
+LLM 返回工具调用
+  -> Function Calling Adapter
+  -> Agent Capability / Application Use Case
+
+MCP 请求或响应
+  -> MCP Adapter
+  -> Agent Capability / Application Use Case
+```
+
+两者最终都应落到稳定的 Agent Capability 或 Application Use Case，不能直接操作 Repository、数据库或具体模型客户端。协议适配器不应把 Function Calling 或 MCP 的协议对象泄漏到 Domain。
+
+### Conversation 与上下文
+
+会话管理是独立的 Conversation 能力。它负责会话 ID、消息历史、上下文裁剪、持久化和恢复；LLM Adapter 只接收本次调用所需的消息或 Prompt，不自行保存上下文。Agent Runtime 也不应隐式承担长期会话存储。
 
 ## HTTP 交互契约与适配边界
 

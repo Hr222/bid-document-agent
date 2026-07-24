@@ -24,6 +24,7 @@ from app.composition.knowledge import (
     build_write_capability,
     build_write_repository,
 )
+from app.composition.llm import build_chat_llm
 from app.composition.online import (
     build_decision_service,
     build_policy_decision_application_service,
@@ -47,7 +48,6 @@ from app.infrastructure.persistence.repositories.policy_persistence_gateway impo
 )
 from app.infrastructure.persistence.session import SessionLocal
 from app.interfaces.agent import FunctionCallingAdapter
-from app.modules.agent.tender.ports.llm_port import StructuredLlmPort
 from app.modules.ingestion.application.ingestion_use_case import IngestionUseCase
 from app.modules.ingestion.application.retry_ingestion import RetryIngestionUseCase
 from app.modules.ingestion.application.scan_candidates import PolicyCandidateScanUseCase
@@ -56,6 +56,8 @@ from app.modules.knowledge import KnowledgeBaseQueryCapability, KnowledgePublica
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.management_service import KnowledgeManagementService
 from app.modules.knowledge.application.write_capability import KnowledgeBaseWriteCapability
+from app.modules.llm.application.chat import ChatApplication
+from app.modules.llm.contracts import ChatLlmPort, StructuredLlmPort
 from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.application.data_acquisition import (
     ChecklistDataProviderRegistry,
@@ -102,6 +104,7 @@ class ApplicationContainer:
         data_provider_registry: ChecklistDataProviderRegistry | None = None,
         answer_service: RagAnswerGenerator | None = None,
         tender_structured_llm: StructuredLlmPort | None = None,
+        chat_llm: ChatLlmPort | None = None,
         openai_client_factory: OpenAICompatibleClientFactory | None = None,
     ) -> None:
         self.session = session
@@ -113,6 +116,8 @@ class ApplicationContainer:
         self._data_provider_registry = data_provider_registry
         self._answer_service = answer_service
         self._tender_structured_llm = tender_structured_llm
+        self._chat_llm = chat_llm
+        self._chat_application: ChatApplication | None = None
         self._openai_client_factory = openai_client_factory
         self._persistence_gateway: PolicyPersistenceGateway | None = None
         self._write_repository: KnowledgeWriteRepository | None = None
@@ -146,6 +151,15 @@ class ApplicationContainer:
                 self.openai_client_factory()
             )
         return self._tender_structured_llm
+
+    def chat_application(self) -> ChatApplication:
+        """提供无数据库依赖的独立单轮 LLM Chat 用例。"""
+
+        if self._chat_application is None:
+            if self._chat_llm is None:
+                self._chat_llm = build_chat_llm(self.openai_client_factory())
+            self._chat_application = ChatApplication(self._chat_llm)
+        return self._chat_application
 
     def openai_client_factory(self) -> OpenAICompatibleClientFactory:
         """返回供 RAG 和 Agent 共享的 OpenAI-compatible Client Factory。"""

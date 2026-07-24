@@ -2,7 +2,7 @@
 
 from app.infrastructure.llm.langchain_glm_adapter import LangChainGlmStructuredLlm
 from app.infrastructure.llm.openai_client_factory import OpenAICompatibleClientFactory
-from app.modules.agent.tender.ports.llm_port import StructuredLlmPort
+from app.modules.llm.contracts import StructuredLlmPort
 
 
 def build_tender_structured_llm(

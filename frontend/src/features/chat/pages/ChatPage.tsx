@@ -19,6 +19,7 @@ import {
   Workflow,
 } from "lucide-react";
 
+import { useChat } from "../hooks/useChat";
 import styles from "./ChatPage.module.css";
 
 type ChatRole = "user" | "assistant";
@@ -30,72 +31,48 @@ type ChatMessage = {
   timestamp: string;
   citations?: string[];
   metrics?: string;
+  request?: string;
 };
 
-const initialMessages: ChatMessage[] = [
-  {
-    id: "message-1",
-    role: "user",
-    content: "请帮我梳理这份招标文件的技术响应重点，并指出需要补充的证明材料。",
-    timestamp: "今天 10:42",
-  },
-  {
-    id: "message-2",
-    role: "assistant",
-    content:
-      "我已经基于当前选中的知识库完成初步梳理。技术响应可以优先关注三个方面：\n\n1. 项目实施方案是否覆盖招标文件中的交付边界与验收节点。\n2. 关键技术指标是否逐项给出响应值、测试方法和佐证材料。\n3. 团队与服务保障部分是否提供项目负责人、类似业绩和售后响应承诺。\n\n建议补充：产品检测报告、近三年类似项目合同关键页，以及项目团队成员的资质证书。",
-    timestamp: "今天 10:42",
-    citations: ["招标文件 · 技术需求 · 第 18 页", "企业资质库 · 业绩证明 · 2024 年版"],
-    metrics: "检索 6 个片段 · 1.8s · 612 tokens",
-  },
-];
+const initialMessages: ChatMessage[] = [];
 
-const conversationItems = [
-  { id: "tender-response", title: "投标文件技术响应梳理", meta: "今天 10:42", active: true },
-  { id: "qualification", title: "企业资质材料清单", meta: "昨天 16:20" },
-  { id: "delivery-plan", title: "项目交付计划初稿", meta: "2026/07/22" },
-  { id: "retrieval-test", title: "知识库检索效果测试", meta: "2026/07/21" },
-];
+const conversationItems: Array<{ id: string; title: string; meta: string }> = [];
 
 const promptSuggestions = [
-  "总结这份招标文件",
-  "生成技术响应目录",
-  "查找类似项目业绩",
+  "介绍一下你的能力",
+  "解释什么是 LangChain",
+  "给我一个技术方案思路",
 ];
 
 export function ChatPage() {
-  const [activeConversation, setActiveConversation] = useState("tender-response");
+  const [activeConversation, setActiveConversation] = useState("new-conversation");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputValue, setInputValue] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
-  const [useKnowledgeBase, setUseKnowledgeBase] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const chatMutation = useChat();
+  const isThinking = chatMutation.isPending;
   const messageStreamRef = useRef<HTMLDivElement>(null);
-  const responseTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const stream = messageStreamRef.current;
     if (stream) stream.scrollTo({ top: stream.scrollHeight, behavior: "smooth" });
   }, [messages, isThinking]);
 
-  useEffect(() => () => {
-    if (responseTimerRef.current) window.clearTimeout(responseTimerRef.current);
-  }, []);
-
   const handleNewConversation = () => {
     setActiveConversation("new-conversation");
     setMessages([]);
     setInputValue("");
-    setIsThinking(false);
+    setErrorMessage(null);
   };
 
   const handleConversationSelect = (conversationId: string) => {
     setActiveConversation(conversationId);
     setMessages(conversationId === "tender-response" ? initialMessages : []);
     setInputValue("");
-    setIsThinking(false);
+    setErrorMessage(null);
   };
 
-  const handleSend = (suggestion?: string) => {
+  const handleSend = async (suggestion?: string) => {
     const content = (suggestion ?? inputValue).trim();
     if (!content || isThinking) return;
 
@@ -105,21 +82,25 @@ export function ChatPage() {
       { id: `user-${Date.now()}`, role: "user", content, timestamp: `今天 ${now}` },
     ]);
     setInputValue("");
-    setIsThinking(true);
-    responseTimerRef.current = window.setTimeout(() => {
+    setErrorMessage(null);
+
+    try {
+      const result = await chatMutation.mutateAsync(content);
       setMessages((current) => [
         ...current,
         {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          content: `已完成对“${content}”的 mock 分析。后续接入 LangChain 时，这里可以替换为真实的检索、工具调用和流式响应结果。`,
+          content: result.answer,
           timestamp: `今天 ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`,
-          citations: useKnowledgeBase ? ["招标文件 · 已选知识库 · 相关片段"] : undefined,
-          metrics: "Mock 响应 · 0.6s · 128 tokens",
+          metrics: `${result.model} · ${result.durationMs}ms${result.totalTokens === null ? "" : ` · ${result.totalTokens} tokens`}`,
+          request: content,
         },
       ]);
-      setIsThinking(false);
-    }, 900);
+    } catch (error) {
+      const apiError = error as { message?: string };
+      setErrorMessage(apiError.message ?? "LLM 请求失败，请稍后重试。");
+    }
   };
 
   const handleCopy = async (content: string) => {
@@ -169,7 +150,7 @@ export function ChatPage() {
 
         <div className={styles.storageHint}>
           <Archive size={14} />
-          <span><strong>4</strong> 个会话 · 已自动保存</span>
+          <span>当前不保存会话历史</span>
         </div>
       </aside>
 
@@ -178,8 +159,8 @@ export function ChatPage() {
           <div className={styles.agentIdentity}>
             <div className={styles.agentIcon}><Bot size={19} /></div>
             <div>
-              <div className={styles.agentTitle}>投标助手 <span className={styles.statusDot} /> 在线</div>
-              <div className={styles.agentSubtitle}>Tender Agent · 检索增强对话</div>
+              <div className={styles.agentTitle}>LLM 助手 <span className={styles.statusDot} /> 在线</div>
+              <div className={styles.agentSubtitle}>单轮模型调用验证</div>
             </div>
           </div>
           <div className={styles.chatHeaderActions}>
@@ -193,16 +174,16 @@ export function ChatPage() {
             <div className={styles.emptyConversation}>
               <div className={styles.emptyIcon}><Sparkles size={20} /></div>
               <h2>开始一段新的工作对话</h2>
-              <p>从招标文件、知识库检索或技术响应开始，投标助手会在这里协助你。</p>
+              <p>发送一条消息，验证后端 LangChain 与 GLM 的单轮调用。</p>
             </div>
           )}
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} onCopy={handleCopy} onRetry={() => handleSend(message.content)} />
+            <MessageBubble key={message.id} message={message} onCopy={handleCopy} onRetry={() => handleSend(message.request ?? message.content)} />
           ))}
           {isThinking && (
             <div className={styles.assistantRow}>
               <div className={styles.messageAvatar}><Bot size={16} /></div>
-              <div className={styles.thinkingBubble}><span /><span /><span /><em>正在检索知识库并组织回答</em></div>
+              <div className={styles.thinkingBubble}><span /><span /><span /><em>正在请求模型</em></div>
             </div>
           )}
         </div>
@@ -240,30 +221,30 @@ export function ChatPage() {
               </button>
             </div>
           </div>
+          {errorMessage && <div className={styles.errorMessage} role="alert">{errorMessage}</div>}
         </footer>
       </section>
 
-      <aside className={styles.inspector} aria-label="对话上下文">
+      <aside className={styles.inspector} aria-label="LLM 调用信息">
         <div className={styles.inspectorHeading}>
-          <div><span className={styles.eyebrow}>WORKSPACE</span><h2>对话上下文</h2></div>
+          <div><span className={styles.eyebrow}>LLM TEST</span><h2>调用信息</h2></div>
           <button className={styles.iconButton} type="button" title="收起上下文" aria-label="收起上下文"><ChevronDown size={16} /></button>
         </div>
 
         <div className={styles.inspectorSection}>
-          <div className={styles.sectionTitle}><span>知识库</span><button type="button" className={styles.textButton}>管理</button></div>
-          <button className={styles.sourceCard} type="button" onClick={() => setUseKnowledgeBase((value) => !value)}>
-            <div className={styles.sourceIcon}><FileText size={16} /></div>
-            <div className={styles.sourceCopy}><strong>投标文件知识库</strong><small>128 份文档 · 已发布</small></div>
-            <span className={`${styles.toggle} ${useKnowledgeBase ? styles.toggleOn : ""}`}><span /></span>
-          </button>
-          <div className={styles.contextNote}>{useKnowledgeBase ? "回答会优先引用已发布文档" : "当前回答不使用知识库"}</div>
+          <div className={styles.sectionTitle}><span>调用模式</span></div>
+          <div className={styles.sourceCard}>
+            <div className={styles.sourceIcon}><Sparkles size={16} /></div>
+            <div className={styles.sourceCopy}><strong>独立 LLM 调用</strong><small>单轮 · 无上下文 · 无工具</small></div>
+          </div>
+          <div className={styles.contextNote}>当前只验证模型文本响应</div>
         </div>
 
         <div className={styles.inspectorSection}>
           <div className={styles.sectionTitle}><span>当前模型</span><button type="button" className={styles.textButton}>切换</button></div>
           <div className={styles.modelCard}>
             <div className={styles.modelMark}>GLM</div>
-            <div className={styles.sourceCopy}><strong>GLM-4-Plus</strong><small>后端适配 · 流式输出</small></div>
+            <div className={styles.sourceCopy}><strong>GLM</strong><small>LangChain 后端适配 · 单轮调用</small></div>
             <Check size={15} color="#2aa77c" />
           </div>
         </div>
@@ -272,13 +253,13 @@ export function ChatPage() {
           <div className={styles.sectionTitle}><span>响应设置</span></div>
           <div className={styles.parameterRow}><span>温度</span><strong>0.2</strong></div>
           <div className={styles.parameterTrack}><span style={{ width: "20%" }} /></div>
-          <div className={styles.parameterRow}><span>召回数量</span><strong>5</strong></div>
-          <div className={styles.parameterRow}><span>引用来源</span><strong>开启</strong></div>
+          <div className={styles.parameterRow}><span>上下文记忆</span><strong>未接入</strong></div>
+          <div className={styles.parameterRow}><span>工具调用</span><strong>未接入</strong></div>
         </div>
 
         <div className={styles.langchainNote}>
           <div className={styles.langchainIcon}><Workflow size={15} /></div>
-          <div><strong>LangChain 测试基底</strong><p>前端仅展示运行上下文，编排逻辑由后端接管。</p></div>
+          <div><strong>LangChain 技术验证</strong><p>当前只验证通用 LLM 的单轮调用。</p></div>
         </div>
       </aside>
     </div>
@@ -295,7 +276,7 @@ function MessageBubble({ message, onCopy, onRetry }: { message: ChatMessage; onC
       <div className={styles.messageAvatar}><Bot size={16} /></div>
       <div className={styles.assistantMessageGroup}>
         <div className={styles.assistantMessage}>
-          <div className={styles.assistantLabel}>投标助手 <span>已完成</span></div>
+          <div className={styles.assistantLabel}>LLM 助手 <span>已完成</span></div>
           <p>{message.content}</p>
           {message.citations && <div className={styles.citations}>{message.citations.map((citation) => <button key={citation} type="button"><FileText size={13} />{citation}</button>)}</div>}
         </div>

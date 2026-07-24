@@ -8,6 +8,7 @@ from app.modules.ingestion.ports import UploadStoragePort
 from app.modules.knowledge.application.knowledge_base import KnowledgeBaseService
 from app.modules.knowledge.application.management_service import KnowledgeManagementService
 from app.modules.knowledge.application.publication_service import KnowledgePublicationService
+from app.modules.llm.application.chat import ChatApplication
 from app.modules.online.application.ask_knowledge import AskKnowledgeUseCase
 from app.modules.online.application.policy_decision import PolicyDecisionApplicationService
 
@@ -22,6 +23,14 @@ def get_application_container(
 def get_stateless_application_container() -> ApplicationContainer:
     """为纯内存或文件系统能力提供无会话容器。"""
     return ApplicationContainer()
+
+
+def get_chat_application(
+    container: ApplicationContainer = Depends(get_stateless_application_container),
+) -> ChatApplication:
+    """提供不依赖数据库的独立 LLM Chat 用例。"""
+
+    return container.chat_application()
 
 
 def get_ask_knowledge_use_case(

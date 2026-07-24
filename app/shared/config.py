@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     postgres_password: str = "123456"
     postgres_host: str = "127.0.0.1"
     postgres_port: int = 5432
+    postgres_connect_timeout_seconds: int = Field(
+        default=5,
+        gt=0,
+        le=60,
+        alias="POSTGRES_CONNECT_TIMEOUT_SECONDS",
+    )
     database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
 
     gitee_api_key: str | None = Field(default=None, alias="GITEE_API_KEY")

@@ -6,6 +6,7 @@ from app.interfaces.http.schemas.knowledge_base import (
     PolicyDocumentOptionList,
     RagMvpStatus,
 )
+from app.interfaces.http.schemas.llm import LlmChatRequest, LlmChatResponse, LlmUsage
 from app.interfaces.http.schemas.policy_decision import (
     PolicyDecisionChecklistRequest,
     PolicyDecisionChecklistResponse,
@@ -81,6 +82,9 @@ __all__ = [
     "FormatNormalizationResult",
     "IntakeValidationResult",
     "KnowledgeBaseOverview",
+    "LlmChatRequest",
+    "LlmChatResponse",
+    "LlmUsage",
     "KnowledgePublicationRequest",
     "KnowledgePublicationResponse",
     "OcrProcessResult",

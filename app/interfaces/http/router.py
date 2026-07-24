@@ -6,6 +6,7 @@ from app.interfaces.http.routes import (
     knowledge_base,
     knowledge_management,
     knowledge_publication,
+    llm,
     policy_decision,
     policy_ingestion,
     policy_pipeline,
@@ -14,6 +15,7 @@ from app.interfaces.http.routes import (
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
 api_router.include_router(knowledge_base.router, prefix="/kb", tags=["knowledge-base"])
 api_router.include_router(
     knowledge_management.router,

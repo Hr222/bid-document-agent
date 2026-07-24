@@ -6,7 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
 
 from app.infrastructure.llm.openai_client_factory import OpenAICompatibleClientFactory
-from app.modules.agent.tender.ports.llm_port import (
+from app.modules.llm.contracts import (
     StructuredLlmPort,
     StructuredLlmRequest,
     StructuredLlmResult,
